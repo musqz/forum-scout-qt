@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Forum Scout Qt
+GenericName=Forum Search Tool
+Comment=Multi-forum search tool for KDE and Qt-based desktops
+Exec=forum-scout
+Icon=system-search
+Type=Application
+Categories=Network;Qt;
+Keywords=forum;search;arch;manjaro;kde;
