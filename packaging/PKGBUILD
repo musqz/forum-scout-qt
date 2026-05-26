@@ -13,7 +13,7 @@ depends=(
 )
 checkdepends=('desktop-file-utils')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('0ff1bf574e2438bf054b16249ec5832aa8ab6eae64447f85973a156e45578384')
 
 prepare() {
   cd "$pkgname-$pkgver"
