@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# PKGBUILD build artifacts
+packaging/src/
+packaging/pkg/
+packaging/*.pkg.tar.zst
+packaging/*.tar.gz
