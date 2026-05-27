@@ -25,7 +25,8 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 - **Hover tooltip** — full URL shown in the status bar on mouse-over
 - **Keyboard shortcuts** — `Ctrl+L` focus search · `F6` jump to results · `Enter` open row · `Ctrl+Enter` open all selected · `Ctrl+B` toggle bookmark · `Ctrl+F` toggle forums bar · `Escape` clear · `F5` re-run · `Del` delete bookmark(s) · `Ctrl+Z` undo · `?` show all shortcuts
 - **Persistent settings** — window size, hits per source, active forums and forums bar state saved on exit
-- **Shared config with GTK version** — bookmarks, history and settings are fully compatible; switching between the GTK and Qt versions loses nothing
+- **Custom forums** — add extra Discourse forums via `~/.config/forum-scout/custom-forums.conf`; shared with the GTK version, extra entries wrap to a new row automatically
+- **Shared config with GTK version** — bookmarks, history, settings and custom forums are fully compatible; switching between the GTK and Qt versions loses nothing
 - **Multilingual** — 18 languages auto-detected from `$LANG`: Arabic, Chinese, Danish, Dutch, English, Farsi, French, German, Greek, Hebrew, Japanese, Polish, Portuguese, Romanian, Russian, Spanish, Turkish, Ukrainian
 
 ---
@@ -63,6 +64,23 @@ pacman -S forum-scout-qt
 ```
 
 > Installs as `forum-scout` and conflicts with the GTK version — only one can be active at a time, but all your data carries over when switching.
+
+---
+
+## Custom Forums
+
+Add extra Discourse forums by creating `~/.config/forum-scout/custom-forums.conf` — one entry per line:
+
+```
+{"name": "NixOS",  "url": "https://discourse.nixos.org",         "color": "#5277c3"}
+{"name": "Fedora", "url": "https://discussion.fedoraproject.org", "color": "#3c6eb4"}
+```
+
+- Any Discourse-based forum works — picked up automatically on next launch
+- Extra entries wrap to a new row in the forums bar automatically
+- Pick any hex color you like
+- Lines starting with `#` are ignored (comments)
+- The file is shared with the GTK version — configure once, works in both
 
 ---
 
