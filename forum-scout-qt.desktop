@@ -2,7 +2,7 @@
 Name=Forum Scout Qt
 GenericName=Forum Search Tool
 Comment=Multi-forum search tool for KDE and Qt-based desktops
-Exec=env QT_QPA_PLATFORM=xcb forum-scout
+Exec=forum-scout
 Icon=system-search
 Type=Application
 Categories=Network;Qt;

@@ -84,6 +84,22 @@ Add extra Discourse forums by creating `~/.config/forum-scout/custom-forums.conf
 
 ---
 
+## Running on GTK / Openbox desktops
+
+Forum Scout Qt is built for KDE and Qt-based desktops. On GTK-based desktops (XFCE, GNOME, Openbox, Mabox) Qt6 may fail to launch due to a missing XDG portal daemon. Fix it by forcing the X11 platform:
+
+```bash
+QT_QPA_PLATFORM=xcb forum-scout
+```
+
+To make it permanent, add this to your `~/.profile` or `~/.bash_profile`:
+
+```bash
+export QT_QPA_PLATFORM=xcb
+```
+
+---
+
 ## GTK version
 
 Looking for the GTK3 version? → [github.com/musqz/forum-scout](https://github.com/musqz/forum-scout)
