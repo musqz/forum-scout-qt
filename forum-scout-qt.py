@@ -21,11 +21,11 @@ try:
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
         QLineEdit, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
         QHeaderView, QStatusBar, QLabel, QSpinBox, QCheckBox, QMenu,
-        QMessageBox, QAbstractItemView, QSizePolicy, QGridLayout, QFrame,
+        QMessageBox, QAbstractItemView, QSizePolicy, QGridLayout, QFrame, QLayout,
     )
     from PyQt6.QtCore import (
         Qt, QTimer, QObject, pyqtSignal, QSortFilterProxyModel, QStringListModel,
-        QSize, QPoint, QEvent,
+        QSize, QPoint, QRect, QEvent,
     )
     from PyQt6.QtGui import (
         QColor, QFont, QKeySequence, QShortcut, QFontMetrics, QBrush,
@@ -422,6 +422,66 @@ class _MultiWordProxyModel(QSortFilterProxyModel):
         return all(w in lower for w in self._words)
 
 
+class FlowLayout(QLayout):
+    """Wrapping flow layout — items wrap to the next row when the width is exceeded."""
+    def __init__(self, parent=None, h_spacing=8, v_spacing=4):
+        super().__init__(parent)
+        self._h_spacing = h_spacing
+        self._v_spacing = v_spacing
+        self._items = []
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, index):
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index):
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        return size + QSize(m.left() + m.right(), m.top() + m.bottom())
+
+    def _do_layout(self, rect, test_only):
+        m = self.contentsMargins()
+        eff = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
+        x, y, line_h = eff.x(), eff.y(), 0
+        for item in self._items:
+            w = item.sizeHint().width()
+            h = item.sizeHint().height()
+            next_x = x + w + self._h_spacing
+            if x > eff.x() and next_x - self._h_spacing > eff.right():
+                x = eff.x()
+                y += line_h + self._v_spacing
+                next_x = x + w + self._h_spacing
+                line_h = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), item.sizeHint()))
+            x = next_x
+            line_h = max(line_h, h)
+        return y + line_h - rect.y() + m.bottom()
+
+
 # ─── Main window ──────────────────────────────────────────────────────────────
 class ScoutWindow(QMainWindow):
 
@@ -515,8 +575,9 @@ class ScoutWindow(QMainWindow):
         fbox.setContentsMargins(0, 0, 0, 0)
         fbox.setSpacing(2)
 
-        row2 = QHBoxLayout()
-        row2.setSpacing(8)
+        distro_widget = QWidget()
+        distro_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        row2 = FlowLayout(distro_widget, h_spacing=8, v_spacing=4)
         row3 = QHBoxLayout()
         row3.setSpacing(8)
         row4 = QHBoxLayout()
@@ -535,7 +596,6 @@ class ScoutWindow(QMainWindow):
             else:
                 row4.addWidget(cb)
 
-        row2.addStretch()
         row3.addStretch()
         row4.addStretch()
         hits_lbl = QLabel(S["hits_label"])
@@ -547,7 +607,7 @@ class ScoutWindow(QMainWindow):
         self._hits_spin.setFixedWidth(55)
         row4.addWidget(self._hits_spin)
 
-        fbox.addLayout(row2)
+        fbox.addWidget(distro_widget)
         fbox.addLayout(row3)
         fbox.addLayout(row4)
         vbox.addWidget(self._forums_bar)
