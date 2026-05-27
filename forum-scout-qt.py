@@ -48,8 +48,9 @@ BOOKMARK_FILE = os.path.join(CACHE_DIR, "bookmarks.log")
 HISTORY_FILE  = os.path.join(CACHE_DIR, "history.log")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-CONFIG_DIR    = os.path.expanduser("~/.config/forum-scout")
-SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
+CONFIG_DIR          = os.path.expanduser("~/.config/forum-scout")
+SETTINGS_FILE       = os.path.join(CONFIG_DIR, "settings.json")
+CUSTOM_FORUMS_FILE  = os.path.join(CONFIG_DIR, "custom-forums.conf")
 os.makedirs(CONFIG_DIR, exist_ok=True)
 
 APP_TITLE    = "Forum Scout"
@@ -77,6 +78,39 @@ FORUMS = [
     {"name": "KDE",          "type": "discourse", "url": "https://discuss.kde.org",             "color": "#1d99f3", "on": True,  "group": "de"},
     {"name": "GNOME",        "type": "discourse", "url": "https://discourse.gnome.org",         "color": "#3584e4", "on": True,  "group": "de"},
 ]
+
+# ─── Custom forums ───────────────────────────────────────────────────────────
+def _load_custom_forums():
+    if not os.path.exists(CUSTOM_FORUMS_FILE):
+        with open(CUSTOM_FORUMS_FILE, "w") as f:
+            f.write(
+                "# Custom Discourse forums for forum-scout\n"
+                "# One entry per line — add any Discourse-based forum:\n"
+                "#\n"
+                "# {\"name\": \"NixOS\",  \"url\": \"https://discourse.nixos.org\",         \"color\": \"#5277c3\"}\n"
+                "# {\"name\": \"Fedora\", \"url\": \"https://discussion.fedoraproject.org\", \"color\": \"#3c6eb4\"}\n"
+            )
+        return
+    existing = {f["name"].lower() for f in FORUMS}
+    with open(CUSTOM_FORUMS_FILE) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                entry = json.loads(line)
+                name  = str(entry.get("name",  "")).strip()
+                url   = str(entry.get("url",   "")).strip()
+                color = str(entry.get("color", "#888888")).strip()
+                if not name or not url or name.lower() in existing:
+                    continue
+                FORUMS.append({"name": name, "type": "discourse", "url": url,
+                               "color": color, "on": True, "group": "distro"})
+                existing.add(name.lower())
+            except Exception:
+                continue
+
+_load_custom_forums()
 
 # ─── i18n ─────────────────────────────────────────────────────────────────────
 _lang = (locale.getlocale()[0] or "en")[:2]
