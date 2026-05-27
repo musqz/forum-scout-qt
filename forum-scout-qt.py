@@ -25,7 +25,7 @@ try:
     )
     from PyQt6.QtCore import (
         Qt, QTimer, QObject, pyqtSignal, QSortFilterProxyModel, QStringListModel,
-        QSize, QPoint,
+        QSize, QPoint, QEvent,
     )
     from PyQt6.QtGui import (
         QColor, QFont, QKeySequence, QShortcut, QFontMetrics, QBrush,
@@ -534,12 +534,18 @@ class ScoutWindow(QMainWindow):
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(5)
         for row, (key, desc) in enumerate([
-            ("Ctrl+L",  "Focus search bar"),
-            ("Ctrl+F",  "Toggle forums bar"),
-            ("F5",      "Re-run last search"),
-            ("Escape",  "Clear search"),
-            ("Del",     "Delete selected bookmark(s)"),
-            ("Ctrl+Z",  "Undo last bookmark delete"),
+            ("Ctrl+L",          "Focus search bar"),
+            ("F6",              "Focus table (tab-aware)"),
+            ("Ctrl+F",          "Toggle forums bar"),
+            ("F5",              "Re-run last search"),
+            ("Escape",          "Clear search"),
+            ("Enter",           "Open focused row in browser"),
+            ("Ctrl+Enter",      "Open all selected results in browser"),
+            ("Ctrl+B",          "Bookmark / un-bookmark selected result(s)"),
+            ("Del",             "Delete selected bookmark(s)"),
+            ("Ctrl+Z",          "Undo last bookmark delete"),
+            ("Ctrl+Tab",        "Switch tabs"),
+            ("?",               "Show this help"),
         ]):
             k = QLabel(f"<b>{key}</b>")
             k.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -588,6 +594,7 @@ class ScoutWindow(QMainWindow):
         self._res_table.customContextMenuRequested.connect(self._on_result_context_menu)
         self._res_table.mouseMoveEvent = self._on_result_hover
         self._res_table.leaveEvent    = self._on_result_hover_leave
+        self._res_table.installEventFilter(self)
 
         v.addWidget(self._res_table)
         return w
@@ -637,6 +644,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.verticalHeader().setVisible(False)
         self._bm_table.setSortingEnabled(True)
         self._bm_table.itemDoubleClicked.connect(self._on_bm_double_click)
+        self._bm_table.installEventFilter(self)
         v.addWidget(self._bm_table)
 
         self._load_bookmarks()
@@ -672,6 +680,7 @@ class ScoutWindow(QMainWindow):
         self._hist_table.verticalHeader().setVisible(False)
         self._hist_table.setSortingEnabled(False)
         self._hist_table.itemDoubleClicked.connect(self._on_hist_double_click)
+        self._hist_table.installEventFilter(self)
         v.addWidget(self._hist_table)
 
         self._load_history()
@@ -986,30 +995,83 @@ class ScoutWindow(QMainWindow):
         item = self._res_table.item(row, 0)
         return item.data(Qt.ItemDataRole.UserRole) if item else ""
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if obj is self._res_table:
+                row = self._res_table.currentRow()
+                if row >= 0:
+                    link = self._result_link_for_row(row)
+                    if link:
+                        self._open_url(link)
+                return True
+            if obj is self._bm_table:
+                self._bm_open()
+                return True
+            if obj is self._hist_table:
+                self._hist_rerun()
+                return True
+        return super().eventFilter(obj, event)
+
     def _on_result_double_click(self, item):
         link = self._result_link_for_row(item.row())
         if link:
             self._open_url(link)
 
+    def _result_selected_rows(self) -> list[int]:
+        return sorted({idx.row() for idx in self._res_table.selectedIndexes()})
+
     def _on_result_context_menu(self, pos):
         row = self._res_table.rowAt(pos.y())
         if row < 0:
-            return
-        self._res_table.selectRow(row)
-        link  = self._result_link_for_row(row)
-        forum = self._res_table.item(row, 1).text() if self._res_table.item(row, 1) else ""
-        title = self._res_table.item(row, 2).text() if self._res_table.item(row, 2) else ""
-        if not link:
+            row = self._res_table.currentRow()
+            if row < 0:
+                return
+            rect = self._res_table.visualRect(
+                self._res_table.model().index(row, 2)
+            )
+            pos = rect.bottomLeft()
+
+        selected = self._result_selected_rows()
+        if row not in selected:
+            self._res_table.selectRow(row)
+            selected = [row]
+
+        links = [self._result_link_for_row(r) for r in selected]
+        links = [l for l in links if l]
+        if not links:
             return
 
-        already_bm = link in {r[2] for r in self._bm_data}
         menu = QMenu(self)
-        menu.addAction(S["ctx_open"],  lambda: self._open_url(link))
-        menu.addAction(S["ctx_copy"],  lambda: self._copy(link))
-        if already_bm:
-            menu.addAction(S["ctx_bm_remove"], lambda: self._bm_remove_by_link(link))
+        n = len(links)
+
+        if n == 1:
+            link  = links[0]
+            forum = self._res_table.item(row, 1).text() if self._res_table.item(row, 1) else ""
+            title = self._res_table.item(row, 2).text() if self._res_table.item(row, 2) else ""
+            already_bm = link in {r[2] for r in self._bm_data}
+            menu.addAction(S["ctx_open"], lambda: self._open_url(link))
+            menu.addAction(S["ctx_copy"], lambda: self._copy(link))
+            if already_bm:
+                menu.addAction(S["ctx_bm_remove"], lambda: self._bm_remove_by_link(link))
+            else:
+                menu.addAction(S["ctx_bm"], lambda: self._add_bookmark(forum, title, link))
         else:
-            menu.addAction(S["ctx_bm"], lambda: self._add_bookmark(forum, title, link))
+            bm_urls = {r[2] for r in self._bm_data}
+            to_add    = [r for r in selected if self._result_link_for_row(r) not in bm_urls]
+            to_remove = [r for r in selected if self._result_link_for_row(r) in bm_urls]
+
+            menu.addAction(f"Open {n} in browser", lambda: self._open_results_multi(selected))
+            if to_add:
+                menu.addAction(
+                    f"Add {len(to_add)} to bookmarks",
+                    lambda rows=to_add: self._bookmark_results_multi(rows),
+                )
+            if to_remove:
+                menu.addAction(
+                    f"Remove {len(to_remove)} bookmark(s)",
+                    lambda rows=to_remove: self._unbookmark_results_multi(rows),
+                )
+
         menu.exec(self._res_table.viewport().mapToGlobal(pos))
 
     def _on_result_hover(self, event):
@@ -1028,6 +1090,55 @@ class ScoutWindow(QMainWindow):
         self._hover_link = None
         self._hover_lbl.setText("")
         QTableWidget.leaveEvent(self._res_table, event)
+
+    def _open_results_multi(self, rows: list[int]):
+        links = [self._result_link_for_row(r) for r in rows]
+        links = [l for l in links if l]
+        if not links:
+            return
+        if len(links) > 5:
+            mb = QMessageBox(self)
+            mb.setIcon(QMessageBox.Icon.Question)
+            mb.setWindowTitle("Open multiple")
+            mb.setText(f"Open {len(links)} tabs in your browser?")
+            mb.setStandardButtons(
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+            )
+            mb.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if mb.exec() != QMessageBox.StandardButton.Ok:
+                return
+        for url in links:
+            self._open_url(url)
+
+    def _bookmark_results_multi(self, rows: list[int]):
+        bm_urls = self._bookmarked_urls()
+        added = 0
+        for r in rows:
+            link  = self._result_link_for_row(r)
+            if not link or link in bm_urls:
+                continue
+            forum = self._res_table.item(r, 1).text() if self._res_table.item(r, 1) else ""
+            title = self._res_table.item(r, 2).text() if self._res_table.item(r, 2) else ""
+            self._add_bookmark(forum, title, link)
+            bm_urls.add(link)
+            added += 1
+        if added:
+            self._set_status(f"{added} bookmark(s) added.")
+
+    def _unbookmark_results_multi(self, rows: list[int]):
+        links = {self._result_link_for_row(r) for r in rows}
+        links.discard("")
+        to_remove = {bm[2] for bm in self._bm_data} & links
+        if not to_remove:
+            return
+        self._bm_undo_data = [bm for bm in self._bm_data if bm[2] in to_remove]
+        self._bm_data      = [bm for bm in self._bm_data if bm[2] not in to_remove]
+        self._bm_refresh()
+        for link in to_remove:
+            self._mark_result_bookmarked(link, False)
+        self._save_bookmarks()
+        self._set_status(f"{len(to_remove)} bookmark(s) removed.")
+        self._undo_btn.setVisible(True)
 
     # ── Bookmarks ─────────────────────────────────────────────────────────────
     def _add_bookmark(self, forum: str, title: str, link: str):
@@ -1114,16 +1225,35 @@ class ScoutWindow(QMainWindow):
         return links
 
     def _bm_open(self):
-        for item in self._bm_table.selectedItems():
-            if item.column() == 0:
-                self._open_url(item.data(Qt.ItemDataRole.UserRole))
-                break
+        links = [
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._bm_table.selectedItems()
+            if item.column() == 0
+        ]
+        if not links:
+            return
+        if len(links) > 5:
+            mb = QMessageBox(self)
+            mb.setIcon(QMessageBox.Icon.Question)
+            mb.setWindowTitle("Open multiple")
+            mb.setText(f"Open {len(links)} tabs in your browser?")
+            mb.setStandardButtons(
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+            )
+            mb.setDefaultButton(QMessageBox.StandardButton.Cancel)
+            if mb.exec() != QMessageBox.StandardButton.Ok:
+                return
+        for url in links:
+            self._open_url(url)
 
     def _bm_copy(self):
-        for item in self._bm_table.selectedItems():
-            if item.column() == 0:
-                self._copy(item.data(Qt.ItemDataRole.UserRole))
-                break
+        links = [
+            item.data(Qt.ItemDataRole.UserRole)
+            for item in self._bm_table.selectedItems()
+            if item.column() == 0
+        ]
+        if links:
+            self._copy("\n".join(links))
 
     def _bm_remove(self):
         links = self._bm_selected_links()
@@ -1254,12 +1384,53 @@ class ScoutWindow(QMainWindow):
 
     # ── Keyboard shortcuts ────────────────────────────────────────────────────
     def _setup_shortcuts(self):
-        QShortcut(QKeySequence("Ctrl+L"), self).activated.connect(self._focus_search)
-        QShortcut(QKeySequence("Ctrl+F"), self).activated.connect(self._toggle_forums_bar)
-        QShortcut(QKeySequence("F5"),     self).activated.connect(self._on_search)
-        QShortcut(QKeySequence("Escape"), self).activated.connect(self._clear_search)
-        QShortcut(QKeySequence("Delete"), self).activated.connect(self._on_bm_del_key)
-        QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self._bm_undo)
+        QShortcut(QKeySequence("Ctrl+L"),      self).activated.connect(self._focus_search)
+        QShortcut(QKeySequence("Ctrl+F"),      self).activated.connect(self._toggle_forums_bar)
+        QShortcut(QKeySequence("F5"),          self).activated.connect(self._on_search)
+        QShortcut(QKeySequence("F6"),          self).activated.connect(self._focus_active_table)
+        QShortcut(QKeySequence("Escape"),      self).activated.connect(self._clear_search)
+        QShortcut(QKeySequence("Delete"),      self).activated.connect(self._on_bm_del_key)
+        QShortcut(QKeySequence("Ctrl+Z"),      self).activated.connect(self._bm_undo)
+        QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._on_results_open_selected)
+        QShortcut(QKeySequence("Ctrl+B"),      self).activated.connect(self._on_results_bookmark_selected)
+        QShortcut(QKeySequence("?"),           self).activated.connect(self._show_shortcuts)
+
+    def _focus_active_table(self):
+        self._completer.popup().hide()
+        self._entry.clearFocus()
+        idx = self._notebook.currentIndex()
+        if idx == 0:
+            self._res_table.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            if not self._result_selected_rows() and self._res_table.rowCount() > 0:
+                self._res_table.selectRow(0)
+        elif idx == 1:
+            self._bm_table.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            if not self._bm_table.selectedItems() and self._bm_table.rowCount() > 0:
+                self._bm_table.selectRow(0)
+        elif idx == 2:
+            self._hist_table.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            if not self._hist_table.selectedItems() and self._hist_table.rowCount() > 0:
+                self._hist_table.selectRow(0)
+
+    def _on_results_open_selected(self):
+        if self._notebook.currentIndex() != 0 or self._entry.hasFocus():
+            return
+        rows = self._result_selected_rows()
+        if rows:
+            self._open_results_multi(rows)
+
+    def _on_results_bookmark_selected(self):
+        if self._notebook.currentIndex() != 0 or self._entry.hasFocus():
+            return
+        rows = self._result_selected_rows()
+        if not rows:
+            return
+        bm_urls = self._bookmarked_urls()
+        all_bookmarked = all(self._result_link_for_row(r) in bm_urls for r in rows)
+        if all_bookmarked:
+            self._unbookmark_results_multi(rows)
+        else:
+            self._bookmark_results_multi(rows)
 
     def _focus_search(self):
         self._entry.setFocus()
