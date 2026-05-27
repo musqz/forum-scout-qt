@@ -42,6 +42,7 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 | RebornOS | Discourse | Discourse JSON |
 | Arch Wiki | Wiki | MediaWiki JSON |
 | Manjaro Wiki | Wiki | MediaWiki JSON |
+| CachyOS Wiki | Wiki | DuckDuckGo site-search |
 | Arch BBS | BBS | DuckDuckGo site-search *(off by default)* |
 | KDE | DE | Discourse JSON |
 | GNOME | DE | Discourse JSON |

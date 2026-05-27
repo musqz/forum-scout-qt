@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # FORUM SCOUT Qt — Multi-forum search tool (PyQt6)
 # Sources: Mabox · EndeavourOS · Manjaro · CachyOS · Garuda · RebornOS (Discourse)
-#          Arch Wiki · Manjaro Wiki (MediaWiki) · Arch BBS (DuckDuckGo site-search)
+#          Arch Wiki · Manjaro Wiki (MediaWiki) · CachyOS Wiki · Arch BBS (DuckDuckGo site-search)
 #          KDE · GNOME (Discourse)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,7 @@ FORUMS = [
     {"name": "RebornOS",     "type": "discourse", "url": "https://rebornos.discourse.group",    "color": "#dc2626", "on": True,  "group": "distro"},
     {"name": "Arch Wiki",    "type": "mediawiki", "url": "https://wiki.archlinux.org",          "color": "#2563eb", "on": True,  "group": "wiki"},
     {"name": "Manjaro Wiki", "type": "mediawiki", "url": "https://wiki.manjaro.org",            "color": "#22c55e", "on": True,  "group": "wiki",   "page": "index.php?title={slug}"},
+    {"name": "CachyOS Wiki", "type": "ddg",       "url": "wiki.cachyos.org",                    "color": "#7c3aed", "on": True,  "group": "wiki"},
     {"name": "Arch BBS",     "type": "ddg",       "url": "bbs.archlinux.org",                   "color": "#ea580c", "on": False, "group": "wiki"},
     {"name": "KDE",          "type": "discourse", "url": "https://discuss.kde.org",             "color": "#1d99f3", "on": True,  "group": "de"},
     {"name": "GNOME",        "type": "discourse", "url": "https://discourse.gnome.org",         "color": "#3584e4", "on": True,  "group": "de"},
