@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # ─────────────────────────────────────────────────────────────────────────────
 # FORUM SCOUT Qt — Multi-forum search tool (PyQt6)
-# Sources: Mabox · EndeavourOS · Manjaro · CachyOS · Garuda · RebornOS (Discourse)
-#          Arch Wiki · Manjaro Wiki (MediaWiki) · CachyOS Wiki · Arch BBS (DuckDuckGo site-search)
-#          KDE · GNOME (Discourse)
+# Forum registry loaded from forums.conf (see forums.conf for format).
 # ─────────────────────────────────────────────────────────────────────────────
 
 import sys
@@ -48,10 +46,17 @@ BOOKMARK_FILE = os.path.join(CACHE_DIR, "bookmarks.log")
 HISTORY_FILE  = os.path.join(CACHE_DIR, "history.log")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-CONFIG_DIR          = os.path.expanduser("~/.config/forum-scout")
-SETTINGS_FILE       = os.path.join(CONFIG_DIR, "settings.json")
-CUSTOM_FORUMS_FILE  = os.path.join(CONFIG_DIR, "custom-forums.conf")
+CONFIG_DIR    = os.path.expanduser("~/.config/forum-scout")
+SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 os.makedirs(CONFIG_DIR, exist_ok=True)
+
+_FORUMS_SEARCH = [
+    os.path.join(CONFIG_DIR, "forums.conf"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "forums.conf"),
+    os.path.expanduser("~/.local/share/forum-scout/forums.conf"),
+    "/usr/local/share/forum-scout/forums.conf",
+    "/usr/share/forum-scout/forums.conf",
+]
 
 APP_TITLE    = "Forum Scout"
 DEFAULT_HITS = 10
@@ -64,53 +69,39 @@ if _VERSION.startswith("__"):
         _VERSION = "dev"
 
 # ─── Forum registry ───────────────────────────────────────────────────────────
-FORUMS = [
-    {"name": "Mabox",        "type": "discourse", "url": "https://forum.maboxlinux.org",       "color": "#c49000", "on": True,  "group": "distro"},
-    {"name": "EndeavourOS",  "type": "discourse", "url": "https://forum.endeavouros.com",       "color": "#0891b2", "on": True,  "group": "distro"},
-    {"name": "Manjaro",      "type": "discourse", "url": "https://forum.manjaro.org",           "color": "#16a34a", "on": True,  "group": "distro"},
-    {"name": "CachyOS",      "type": "discourse", "url": "https://discuss.cachyos.org",         "color": "#7c3aed", "on": True,  "group": "distro"},
-    {"name": "Garuda",       "type": "discourse", "url": "https://forum.garudalinux.org",       "color": "#db2777", "on": True,  "group": "distro"},
-    {"name": "RebornOS",     "type": "discourse", "url": "https://rebornos.discourse.group",    "color": "#dc2626", "on": True,  "group": "distro"},
-    {"name": "Arch Wiki",    "type": "mediawiki", "url": "https://wiki.archlinux.org",          "color": "#2563eb", "on": True,  "group": "wiki"},
-    {"name": "Manjaro Wiki", "type": "mediawiki", "url": "https://wiki.manjaro.org",            "color": "#22c55e", "on": True,  "group": "wiki",   "page": "index.php?title={slug}"},
-    {"name": "CachyOS Wiki", "type": "ddg",       "url": "wiki.cachyos.org",                    "color": "#7c3aed", "on": True,  "group": "wiki"},
-    {"name": "Arch BBS",     "type": "ddg",       "url": "bbs.archlinux.org",                   "color": "#ea580c", "on": False, "group": "wiki"},
-    {"name": "KDE",          "type": "discourse", "url": "https://discuss.kde.org",             "color": "#1d99f3", "on": True,  "group": "de"},
-    {"name": "GNOME",        "type": "discourse", "url": "https://discourse.gnome.org",         "color": "#3584e4", "on": True,  "group": "de"},
-]
-
-# ─── Custom forums ───────────────────────────────────────────────────────────
-def _load_custom_forums():
-    if not os.path.exists(CUSTOM_FORUMS_FILE):
-        with open(CUSTOM_FORUMS_FILE, "w") as f:
-            f.write(
-                "# Custom Discourse forums for forum-scout\n"
-                "# One entry per line — add any Discourse-based forum:\n"
-                "#\n"
-                "# {\"name\": \"NixOS\",  \"url\": \"https://discourse.nixos.org\",         \"color\": \"#5277c3\"}\n"
-                "# {\"name\": \"Fedora\", \"url\": \"https://discussion.fedoraproject.org\", \"color\": \"#3c6eb4\"}\n"
-            )
-        return
-    existing = {f["name"].lower() for f in FORUMS}
-    with open(CUSTOM_FORUMS_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            try:
-                entry = json.loads(line)
-                name  = str(entry.get("name",  "")).strip()
-                url   = str(entry.get("url",   "")).strip()
-                color = str(entry.get("color", "#888888")).strip()
-                if not name or not url or name.lower() in existing:
+def _load_forums() -> list:
+    for path in _FORUMS_SEARCH:
+        if not os.path.exists(path):
+            continue
+        entries = []
+        seen = set()
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
                     continue
-                FORUMS.append({"name": name, "type": "discourse", "url": url,
-                               "color": color, "on": True, "group": "distro"})
-                existing.add(name.lower())
-            except Exception:
-                continue
+                try:
+                    e     = json.loads(line)
+                    name  = str(e.get("name",  "")).strip()
+                    type_ = str(e.get("type",  "discourse")).strip()
+                    url   = str(e.get("url",   "")).strip()
+                    color = str(e.get("color", "#888888")).strip()
+                    on    = bool(e.get("on",   True))
+                    group = str(e.get("group", "distro")).strip()
+                    if not name or not url or name.lower() in seen:
+                        continue
+                    entry = {"name": name, "type": type_, "url": url,
+                             "color": color, "on": on, "group": group}
+                    if "page" in e:
+                        entry["page"] = str(e["page"])
+                    entries.append(entry)
+                    seen.add(name.lower())
+                except Exception:
+                    continue
+        return entries
+    return []
 
-_load_custom_forums()
+FORUMS = _load_forums()
 
 # ─── i18n ─────────────────────────────────────────────────────────────────────
 _lang = (locale.getlocale()[0] or "en")[:2]
