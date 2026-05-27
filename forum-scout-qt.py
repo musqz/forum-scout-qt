@@ -1322,6 +1322,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
     app.setApplicationVersion(_VERSION)
+    app.setDesktopFileName("forum-scout-qt")
     win = ScoutWindow()
     win.show()
     sys.exit(app.exec())

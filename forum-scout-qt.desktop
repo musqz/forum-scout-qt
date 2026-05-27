@@ -7,3 +7,5 @@ Icon=system-search
 Type=Application
 Categories=Network;Qt;
 Keywords=forum;search;arch;manjaro;kde;
+StartupWMClass=Forum Scout
+StartupNotify=true
