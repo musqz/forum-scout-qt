@@ -11,6 +11,7 @@ install -Dm755 forum-scout-qt.py "$INSTALL_BIN"
 install -Dm644 forum-scout-qt.desktop "$INSTALL_APPS/forum-scout-qt.desktop"
 install -d "$INSTALL_SHARE/translations"
 install -Dm644 translations/*.json "$INSTALL_SHARE/translations/"
+install -Dm644 forums.conf "$INSTALL_SHARE/forums.conf"
 
 sed -i "s/__VERSION__/$(cat VERSION)/" "$INSTALL_BIN"
 

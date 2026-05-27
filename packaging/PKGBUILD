@@ -31,6 +31,7 @@ package() {
   cd "$pkgname-$pkgver"
   install -Dm755 "$pkgname.py" "$pkgdir/usr/bin/forum-scout"
   install -Dm644 "$pkgname.desktop" -t "$pkgdir/usr/share/applications/"
+  install -Dm644 forums.conf -t "$pkgdir/usr/share/forum-scout/"
   install -Dm644 translations/*.json -t "$pkgdir/usr/share/forum-scout/translations/"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
 }
