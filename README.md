@@ -25,8 +25,8 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 - **Hover tooltip** — full URL shown in the status bar on mouse-over
 - **Keyboard shortcuts** — `Ctrl+L` focus search · `F6` jump to results · `Enter` open row · `Ctrl+Enter` open all selected · `Ctrl+B` toggle bookmark · `Ctrl+F` toggle forums bar · `Escape` clear · `F5` re-run · `Del` delete bookmark(s) · `Ctrl+Z` undo · `?` show all shortcuts
 - **Persistent settings** — window size, hits per source, active forums and forums bar state saved on exit
-- **Custom forums** — add extra Discourse forums via `~/.config/forum-scout/custom-forums.conf`; shared with the GTK version, extra entries wrap to a new row automatically
-- **Shared config with GTK version** — bookmarks, history, settings and custom forums are fully compatible; switching between the GTK and Qt versions loses nothing
+- **Custom forums** — add, remove or reorder forums via `forums.conf`; supports Discourse, MediaWiki and DuckDuckGo site-search types
+- **Shared config with GTK version** — bookmarks, history, settings and forums are fully compatible; switching between the GTK and Qt versions loses nothing
 - **Multilingual** — 18 languages auto-detected from `$LANG`: Arabic, Chinese, Danish, Dutch, English, Farsi, French, German, Greek, Hebrew, Japanese, Polish, Portuguese, Romanian, Russian, Spanish, Turkish, Ukrainian
 
 ---
@@ -69,17 +69,31 @@ pacman -S forum-scout-qt
 
 ## Custom Forums
 
-Add extra Discourse forums by creating `~/.config/forum-scout/custom-forums.conf` — one entry per line:
+All forums are defined in `forums.conf`, installed by the package to `/usr/share/forum-scout/forums.conf`.
+
+To add, remove or reorder forums, copy it to your config directory and edit it:
+
+```bash
+cp /usr/share/forum-scout/forums.conf ~/.config/forum-scout/forums.conf
+```
+
+Each line is a JSON object:
 
 ```
-{"name": "NixOS",  "url": "https://discourse.nixos.org",         "color": "#5277c3"}
-{"name": "Fedora", "url": "https://discussion.fedoraproject.org", "color": "#3c6eb4"}
+{"name": "NixOS", "type": "discourse", "url": "https://discourse.nixos.org", "color": "#5277c3", "on": true, "group": "distro"}
 ```
 
-- Any Discourse-based forum works — picked up automatically on next launch
-- Extra entries wrap to a new row in the forums bar automatically
-- Pick any hex color you like
-- Lines starting with `#` are ignored (comments)
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | yes | display name |
+| `type` | yes | `discourse` · `mediawiki` · `ddg` |
+| `url` | yes | base URL |
+| `color` | yes | hex color for the checkbox label |
+| `on` | no | `true`/`false` — default checkbox state (default: `true`) |
+| `group` | no | `distro` · `wiki` · `de` — row in the forums bar (default: `distro`) |
+
+- Lines starting with `#` are comments
+- `~/.config/forum-scout/forums.conf` takes priority over the system file
 - The file is shared with the GTK version — configure once, works in both
 
 ---
