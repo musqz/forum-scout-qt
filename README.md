@@ -16,13 +16,14 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 
 - **Multi-source search** — query Discourse forums, Arch Wiki and Arch BBS in one go
 - **Sortable results** — click any column header to sort by forum, title or date
-- **Bookmarks** — save topics, open or copy links, filter and sort · results marked ★ when already bookmarked · remove directly from the results list · multi-select delete with `Del` · undo last delete with `Ctrl+Z`
+- **Multi-select** — select multiple results to open all at once, or add/remove bookmarks in one action; right-click for context menu
+- **Bookmarks** — save topics, open or copy links, filter and sort · results marked ★ when already bookmarked · add/remove directly from the results list · multi-select delete with `Del` · undo last delete with `Ctrl+Z`
 - **Search history** — re-run any previous search with one click
 - **Forums toggle** — hide the forum selector with the **Forums ▾** button to free up space for results
 - **Dropdown suggestions** — live topic suggestions as you type (press Space)
 - **Color-coded forums** — consistent colors across Results and Bookmarks tabs
 - **Hover tooltip** — full URL shown in the status bar on mouse-over
-- **Keyboard shortcuts** — `Ctrl+L` focus search · `Ctrl+F` toggle forums bar · `Escape` clear · `F5` re-run · `Del` delete bookmark(s) · `Ctrl+Z` undo delete
+- **Keyboard shortcuts** — `Ctrl+L` focus search · `F6` jump to results · `Enter` open row · `Ctrl+Enter` open all selected · `Ctrl+B` toggle bookmark · `Ctrl+F` toggle forums bar · `Escape` clear · `F5` re-run · `Del` delete bookmark(s) · `Ctrl+Z` undo · `?` show all shortcuts
 - **Persistent settings** — window size, hits per source, active forums and forums bar state saved on exit
 - **Shared config with GTK version** — bookmarks, history and settings are fully compatible; switching between the GTK and Qt versions loses nothing
 - **Multilingual** — 18 languages auto-detected from `$LANG`: Arabic, Chinese, Danish, Dutch, English, Farsi, French, German, Greek, Hebrew, Japanese, Polish, Portuguese, Romanian, Russian, Spanish, Turkish, Ukrainian
