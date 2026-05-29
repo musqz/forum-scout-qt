@@ -719,13 +719,15 @@ class ScoutWindow(QMainWindow):
         tb.addWidget(self._undo_btn)
         v.addLayout(tb)
 
-        self._bm_table = QTableWidget(0, 3)
-        self._bm_table.setHorizontalHeaderLabels([S["col_forum"], S["col_title"], S["col_date"]])
+        self._bm_table = QTableWidget(0, 4)
+        self._bm_table.setHorizontalHeaderLabels([S["col_forum"], S["col_title"], S["col_date"], "✓"])
         self._bm_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._bm_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
         self._bm_table.setColumnWidth(2, 145)
+        self._bm_table.setColumnWidth(3, 22)
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._bm_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._bm_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1142,13 +1144,15 @@ class ScoutWindow(QMainWindow):
             link  = links[0]
             forum = self._res_table.item(row, 1).text() if self._res_table.item(row, 1) else ""
             title = self._res_table.item(row, 2).text() if self._res_table.item(row, 2) else ""
+            solved_item = self._res_table.item(row, 4)
+            solved = solved_item.text() if solved_item else ""
             already_bm = link in {r[2] for r in self._bm_data}
             menu.addAction(S["ctx_open"], lambda: self._open_url(link))
             menu.addAction(S["ctx_copy"], lambda: self._copy(link))
             if already_bm:
                 menu.addAction(S["ctx_bm_remove"], lambda: self._bm_remove_by_link(link))
             else:
-                menu.addAction(S["ctx_bm"], lambda: self._add_bookmark(forum, title, link))
+                menu.addAction(S["ctx_bm"], lambda: self._add_bookmark(forum, title, link, solved))
         else:
             bm_urls = {r[2] for r in self._bm_data}
             to_add    = [r for r in selected if self._result_link_for_row(r) not in bm_urls]
@@ -1213,7 +1217,9 @@ class ScoutWindow(QMainWindow):
                 continue
             forum = self._res_table.item(r, 1).text() if self._res_table.item(r, 1) else ""
             title = self._res_table.item(r, 2).text() if self._res_table.item(r, 2) else ""
-            self._add_bookmark(forum, title, link)
+            solved_item = self._res_table.item(r, 4)
+            solved = solved_item.text() if solved_item else ""
+            self._add_bookmark(forum, title, link, solved)
             bm_urls.add(link)
             added += 1
         if added:
@@ -1235,12 +1241,12 @@ class ScoutWindow(QMainWindow):
         self._undo_btn.setVisible(True)
 
     # ── Bookmarks ─────────────────────────────────────────────────────────────
-    def _add_bookmark(self, forum: str, title: str, link: str):
+    def _add_bookmark(self, forum: str, title: str, link: str, solved: str = ""):
         date  = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         color = _FORUM_COLOR.get(forum, "#cdd6f4")
         with open(BOOKMARK_FILE, "a") as f:
-            f.write(f"[{forum}] {title} - {link}|||{date}\n")
-        self._bm_data.append([forum, title, link, date, color])
+            f.write(f"[{forum}] {title} - {link}|||{date}|||{solved}\n")
+        self._bm_data.append([forum, title, link, date, color, solved])
         self._bm_refresh()
         self._mark_result_bookmarked(link, True)
         self._set_status(S["bm_added"].format(title))
@@ -1260,7 +1266,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.setSortingEnabled(False)
         self._bm_table.setRowCount(0)
         for row in self._bm_data:
-            forum, title, link, date, color = row
+            forum, title, link, date, color, solved = row
             if text and not (text in forum.lower() or text in title.lower() or text in link.lower()):
                 continue
             r = self._bm_table.rowCount()
@@ -1278,9 +1284,14 @@ class ScoutWindow(QMainWindow):
             font_t.setWeight(QFont.Weight.DemiBold)
             item_t.setFont(font_t)
 
+            item_s = QTableWidgetItem("✓" if solved else "")
+            item_s.setForeground(QBrush(QColor("#4caf50")))
+            item_s.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
             self._bm_table.setItem(r, 0, item_f)
             self._bm_table.setItem(r, 1, item_t)
             self._bm_table.setItem(r, 2, QTableWidgetItem(date))
+            self._bm_table.setItem(r, 3, item_s)
         self._bm_table.setSortingEnabled(True)
 
     def _load_bookmarks(self):
@@ -1296,16 +1307,17 @@ class ScoutWindow(QMainWindow):
                 try:
                     forum = line.split("]")[0].lstrip("[")
                     rest  = line.split("] ", 1)[1]
-                    parts = rest.split("|||")
-                    body  = parts[0]
-                    date  = parts[1] if len(parts) > 1 else ""
+                    parts  = rest.split("|||")
+                    body   = parts[0]
+                    date   = parts[1] if len(parts) > 1 else ""
+                    solved = parts[2] if len(parts) > 2 else ""
                     cut = body.rfind(" - http")
                     if cut == -1:
                         cut = body.rfind(" - ")
                     title = body[:cut]
                     link  = body[cut + 3:]
                     color = _FORUM_COLOR.get(forum, "#cdd6f4")
-                    self._bm_data.append([forum, title, link, date, color])
+                    self._bm_data.append([forum, title, link, date, color, solved])
                 except Exception:
                     pass
         self._bm_refresh()
@@ -1398,8 +1410,8 @@ class ScoutWindow(QMainWindow):
 
     def _save_bookmarks(self):
         with open(BOOKMARK_FILE, "w") as fh:
-            for f, t, l, d, _ in self._bm_data:
-                fh.write(f"[{f}] {t} - {l}|||{d}\n")
+            for f, t, l, d, _, s in self._bm_data:
+                fh.write(f"[{f}] {t} - {l}|||{d}|||{s}\n")
 
     def _on_bm_double_click(self, item):
         link = None
