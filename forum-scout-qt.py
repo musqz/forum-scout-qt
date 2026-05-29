@@ -1489,6 +1489,8 @@ class ScoutWindow(QMainWindow):
 
     # ── Keyboard shortcuts ────────────────────────────────────────────────────
     def _setup_shortcuts(self):
+        QShortcut(QKeySequence("Ctrl+Tab"),       self).activated.connect(self._tab_next)
+        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self).activated.connect(self._tab_prev)
         QShortcut(QKeySequence("Ctrl+L"),      self).activated.connect(self._focus_search)
         QShortcut(QKeySequence("Ctrl+F"),      self).activated.connect(self._toggle_forums_bar)
         QShortcut(QKeySequence("F5"),          self).activated.connect(self._on_search)
@@ -1499,6 +1501,16 @@ class ScoutWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._on_results_open_selected)
         QShortcut(QKeySequence("Ctrl+B"),      self).activated.connect(self._on_results_bookmark_selected)
         QShortcut(QKeySequence("?"),           self).activated.connect(self._show_shortcuts)
+
+    def _tab_next(self):
+        navigable = self._notebook.count() - 1   # exclude About tab
+        page = min(self._notebook.currentIndex(), navigable - 1)
+        self._notebook.setCurrentIndex((page + 1) % navigable)
+
+    def _tab_prev(self):
+        navigable = self._notebook.count() - 1   # exclude About tab
+        page = min(self._notebook.currentIndex(), navigable - 1)
+        self._notebook.setCurrentIndex((page - 1) % navigable)
 
     def _focus_active_table(self):
         self._completer.popup().hide()
