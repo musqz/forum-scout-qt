@@ -220,7 +220,7 @@ class _ForumUnreachable(Exception):
 _NET_ERRORS = (requests.ConnectionError, requests.Timeout, requests.exceptions.SSLError)
 
 
-def _fetch_discourse(forum: dict, query: str, hits: int) -> list[tuple[str, str, str]]:
+def _fetch_discourse(forum: dict, query: str, hits: int) -> list[tuple[str, str, str, bool]]:
     url = f"{forum['url']}/search.json"
     try:
         r = _session.get(url, params={"q": query}, timeout=9)
@@ -228,9 +228,10 @@ def _fetch_discourse(forum: dict, query: str, hits: int) -> list[tuple[str, str,
         out = []
         base = forum["url"]
         for t in data.get("topics", [])[:hits]:
-            link = f"{base}/t/{t['slug']}/{t['id']}"
-            date = _fmt_date(t.get("created_at", ""))
-            out.append((t["title"], link, date))
+            link   = f"{base}/t/{t['slug']}/{t['id']}"
+            date   = _fmt_date(t.get("created_at", ""))
+            solved = bool(t.get("has_accepted_answer", False))
+            out.append((t["title"], link, date, solved))
         return out
     except _NET_ERRORS:
         raise _ForumUnreachable
@@ -258,7 +259,7 @@ def _fetch_mediawiki(forum: dict, query: str, hits: int) -> list[tuple[str, str,
         for item in data.get("query", {}).get("search", []):
             slug = urllib.parse.quote(item["title"].replace(" ", "_"))
             date = _fmt_date(item.get("timestamp", ""))
-            out.append((item["title"], f"{base}/{page_tpl.format(slug=slug)}", date))
+            out.append((item["title"], f"{base}/{page_tpl.format(slug=slug)}", date, False))
         return out
     except _NET_ERRORS:
         raise _ForumUnreachable
@@ -280,7 +281,7 @@ def _fetch_ddg(forum: dict, query: str, hits: int) -> list[tuple[str, str, str]]
         out = []
         for title, link in parser.results:
             if site in link:
-                out.append((title, link, "—"))
+                out.append((title, link, "—", False))
                 if len(out) >= hits:
                     break
         return out
@@ -658,17 +659,19 @@ class ScoutWindow(QMainWindow):
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
 
-        self._res_table = QTableWidget(0, 4)
+        self._res_table = QTableWidget(0, 5)
         self._res_table.setHorizontalHeaderLabels([
-            S["col_n"], S["col_forum"], S["col_title"], S["col_date"]
+            S["col_n"], S["col_forum"], S["col_title"], S["col_date"], "✓"
         ])
         self._res_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._res_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self._res_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._res_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self._res_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._res_table.setColumnWidth(0, 30)
         self._res_table.setColumnWidth(1, 150)
         self._res_table.setColumnWidth(3, 100)
+        self._res_table.setColumnWidth(4, 22)
         self._res_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._res_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._res_table.setShowGrid(False)
@@ -1005,14 +1008,14 @@ class ScoutWindow(QMainWindow):
             unreachable = forum["name"]
         via_ddg = forum["type"] == "ddg"
         results = [
-            (forum["name"], forum["color"], title, link, date, via_ddg)
-            for title, link, date in items
+            (forum["name"], forum["color"], title, link, date, via_ddg, solved)
+            for title, link, date, solved in items
         ]
         ddg_empty = forum["name"] if via_ddg and not items and not unreachable else None
         self._signals.forum_done.emit(results, ddg_empty, unreachable)
 
     def _add_forum_results(self, new_results: list, ddg_empty_name, unreachable_name):
-        for forum, color, title, link, date, via_ddg in new_results:
+        for forum, color, title, link, date, via_ddg, solved in new_results:
             self._search_idx += 1
             display = forum + (S["via_ddg"] if via_ddg else "")
             marker  = "★" if link in self._bm_urls else ""
@@ -1037,12 +1040,17 @@ class ScoutWindow(QMainWindow):
 
             item_d = QTableWidgetItem(date)
 
+            item_s = QTableWidgetItem("✓" if solved else "")
+            item_s.setForeground(QBrush(QColor("#4caf50")))
+            item_s.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+
             self._res_table.setItem(row, 0, item_n)
             self._res_table.setItem(row, 1, item_f)
             self._res_table.setItem(row, 2, item_t)
             self._res_table.setItem(row, 3, item_d)
+            self._res_table.setItem(row, 4, item_s)
 
-            self._results.append((self._search_idx, forum, color, title, link, date, via_ddg))
+            self._results.append((self._search_idx, forum, color, title, link, date, via_ddg, solved))
 
         if ddg_empty_name:
             self._ddg_empty.append(ddg_empty_name)
@@ -1288,10 +1296,9 @@ class ScoutWindow(QMainWindow):
                 try:
                     forum = line.split("]")[0].lstrip("[")
                     rest  = line.split("] ", 1)[1]
-                    if "|||" in rest:
-                        body, date = rest.rsplit("|||", 1)
-                    else:
-                        body, date = rest, ""
+                    parts = rest.split("|||")
+                    body  = parts[0]
+                    date  = parts[1] if len(parts) > 1 else ""
                     cut = body.rfind(" - http")
                     if cut == -1:
                         cut = body.rfind(" - ")
