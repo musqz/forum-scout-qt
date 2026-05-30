@@ -670,7 +670,7 @@ class ScoutWindow(QMainWindow):
         self._res_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._res_table.setColumnWidth(0, 30)
         self._res_table.setColumnWidth(1, 150)
-        self._res_table.setColumnWidth(3, 100)
+        self._res_table.setColumnWidth(3, 79)
         self._res_table.setColumnWidth(4, 22)
         self._res_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._res_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -726,7 +726,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
-        self._bm_table.setColumnWidth(2, 145)
+        self._bm_table.setColumnWidth(2, 79)
         self._bm_table.setColumnWidth(3, 22)
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._bm_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -735,6 +735,8 @@ class ScoutWindow(QMainWindow):
         self._bm_table.verticalHeader().setVisible(False)
         self._bm_table.setSortingEnabled(True)
         self._bm_table.itemDoubleClicked.connect(self._on_bm_double_click)
+        self._bm_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._bm_table.customContextMenuRequested.connect(self._on_bm_context_menu)
         self._bm_table.installEventFilter(self)
         v.addWidget(self._bm_table)
 
@@ -1242,7 +1244,7 @@ class ScoutWindow(QMainWindow):
 
     # ── Bookmarks ─────────────────────────────────────────────────────────────
     def _add_bookmark(self, forum: str, title: str, link: str, solved: str = ""):
-        date  = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        date  = datetime.datetime.now().strftime("%Y-%m-%d")
         color = _FORUM_COLOR.get(forum, "#cdd6f4")
         with open(BOOKMARK_FILE, "a") as f:
             f.write(f"[{forum}] {title} - {link}|||{date}|||{solved}\n")
@@ -1309,7 +1311,7 @@ class ScoutWindow(QMainWindow):
                     rest  = line.split("] ", 1)[1]
                     parts  = rest.split("|||")
                     body   = parts[0]
-                    date   = parts[1] if len(parts) > 1 else ""
+                    date   = (parts[1].strip().split()[0] if len(parts) > 1 else "")
                     solved = parts[2] if len(parts) > 2 else ""
                     cut = body.rfind(" - http")
                     if cut == -1:
@@ -1328,6 +1330,32 @@ class ScoutWindow(QMainWindow):
             if item.column() == 0:
                 links.add(item.data(Qt.ItemDataRole.UserRole))
         return links
+
+    def _on_bm_context_menu(self, pos):
+        row = self._bm_table.rowAt(pos.y())
+        if row < 0:
+            return
+        item = self._bm_table.item(row, 0)
+        if not item:
+            return
+        link = item.data(Qt.ItemDataRole.UserRole)
+        if not link:
+            return
+
+        selected = self._bm_selected_links()
+        if link not in selected:
+            self._bm_table.selectRow(row)
+            selected = {link}
+
+        menu = QMenu(self)
+        n = len(selected)
+        if n == 1:
+            menu.addAction(S["ctx_open"],      lambda: self._open_url(link))
+            menu.addAction(S["ctx_bm_remove"], lambda: self._bm_remove_by_link(link))
+        else:
+            menu.addAction(f"Open {n} in browser",    self._bm_open)
+            menu.addAction(f"Remove {n} bookmark(s)", self._bm_remove)
+        menu.exec(self._bm_table.viewport().mapToGlobal(pos))
 
     def _bm_open(self):
         links = [
