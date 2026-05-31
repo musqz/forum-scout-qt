@@ -376,7 +376,7 @@ _SEED_TERMS = [
 ]
 
 
-# ─── Added-date delegate (date normal, time orange) ──────────────────────────
+# ─── Added-date delegate (today → orange time, older → date) ─────────────────
 class _AddedDateDelegate(QStyledItemDelegate):
     _TIME_COLOR = QColor("#fb8c00")
 
@@ -387,6 +387,12 @@ class _AddedDateDelegate(QStyledItemDelegate):
         if len(parts) < 2:
             super().paint(painter, option, index)
             return
+        today = datetime.date.today().isoformat()
+        if parts[0] != today:
+            option.text = parts[0]
+            super().paint(painter, option, index)
+            return
+        # today — draw background then orange time
         style = option.widget.style() if option.widget else QStyle()
         style.drawPrimitive(
             QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget
@@ -395,13 +401,9 @@ class _AddedDateDelegate(QStyledItemDelegate):
         text_role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
         fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
         rect = option.rect.adjusted(4, 0, -4, 0)
-        date_w = option.fontMetrics.horizontalAdvance(parts[0] + " ")
         painter.save()
-        painter.setPen(fg)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[0] + " ")
-        time_rect = rect.adjusted(date_w, 0, 0, 0)
         painter.setPen(fg if selected else self._TIME_COLOR)
-        painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
+        painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
         painter.restore()
 
 
@@ -775,7 +777,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
-        self._bm_table.setColumnWidth(2, 130)
+        self._bm_table.setColumnWidth(2, 82)
         self._bm_table.setColumnWidth(3, 79)
         self._bm_table.setColumnWidth(4, 22)
         self._bm_table.setItemDelegateForColumn(2, _AddedDateDelegate(self._bm_table))
