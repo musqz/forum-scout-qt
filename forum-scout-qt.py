@@ -12,6 +12,7 @@ import subprocess
 import datetime
 import urllib.parse
 import locale
+import re
 from html.parser import HTMLParser
 
 try:
@@ -294,6 +295,15 @@ def _fetch_ddg(forum: dict, query: str, hits: int) -> list[tuple[str, str, str]]
         raise _ForumUnreachable
     except Exception:
         return []
+
+
+_DISC_ID_RE = re.compile(r'(https?://[^/]+/t/)[^/]+/(\d+)')
+
+def _disc_key(url: str) -> str:
+    """Normalize a Discourse topic URL to base+id, ignoring the slug.
+    Non-Discourse URLs are returned unchanged."""
+    m = _DISC_ID_RE.match(url)
+    return f"{m.group(1)}{m.group(2)}" if m else url
 
 
 _FETCHERS = {
@@ -1076,7 +1086,7 @@ class ScoutWindow(QMainWindow):
         for forum, color, title, link, date, last_activity, via_ddg, solved in new_results:
             self._search_idx += 1
             display = forum + (S["via_ddg"] if via_ddg else "")
-            marker  = "★" if link in self._bm_urls else ""
+            marker  = "★" if _disc_key(link) in self._bm_urls else ""
 
             row = self._res_table.rowCount()
             self._res_table.insertRow(row)
@@ -1204,7 +1214,7 @@ class ScoutWindow(QMainWindow):
             title = self._res_table.item(row, 2).text() if self._res_table.item(row, 2) else ""
             solved_item = self._res_table.item(row, 5)
             solved = solved_item.text() if solved_item else ""
-            already_bm = link in {r[2] for r in self._bm_data}
+            already_bm = _disc_key(link) in {_disc_key(r[2]) for r in self._bm_data}
             menu.addAction(S["ctx_open"], lambda: self._open_url(link))
             menu.addAction(S["ctx_copy"], lambda: self._copy(link))
             if already_bm:
@@ -1271,7 +1281,7 @@ class ScoutWindow(QMainWindow):
         added = 0
         for r in rows:
             link  = self._result_link_for_row(r)
-            if not link or link in bm_urls:
+            if not link or _disc_key(link) in bm_urls:
                 continue
             forum = self._res_table.item(r, 1).text() if self._res_table.item(r, 1) else ""
             title = self._res_table.item(r, 2).text() if self._res_table.item(r, 2) else ""
@@ -1317,7 +1327,7 @@ class ScoutWindow(QMainWindow):
                 item.setText(marker)
 
     def _bookmarked_urls(self) -> set:
-        return {row[2] for row in self._bm_data}
+        return {_disc_key(row[2]) for row in self._bm_data}
 
     def _bm_refresh(self, *_):
         text = self._bm_filter.text().strip().lower()
@@ -1697,7 +1707,7 @@ class ScoutWindow(QMainWindow):
         if not rows:
             return
         bm_urls = self._bookmarked_urls()
-        all_bookmarked = all(self._result_link_for_row(r) in bm_urls for r in rows)
+        all_bookmarked = all(_disc_key(self._result_link_for_row(r)) in bm_urls for r in rows)
         if all_bookmarked:
             self._unbookmark_results_multi(rows)
         else:
