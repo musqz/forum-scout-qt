@@ -1157,7 +1157,7 @@ class ScoutWindow(QMainWindow):
             self._btn.setEnabled(True)
             self._busy = False
             self._res_table.setSortingEnabled(True)
-            self._res_table.horizontalHeader().resizeSectionsToContents()
+            self._res_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
 
         if new_results and not self._tab_switched:
             self._notebook.setCurrentIndex(0)
@@ -1371,7 +1371,7 @@ class ScoutWindow(QMainWindow):
             self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
             self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
-        self._bm_table.horizontalHeader().resizeSectionsToContents()
+        self._bm_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
 
     def _load_bookmarks(self):
         self._bm_data = []
@@ -1628,7 +1628,7 @@ class ScoutWindow(QMainWindow):
             self._hist_table.insertRow(r)
             self._hist_table.setItem(r, 0, QTableWidgetItem(ts))
             self._hist_table.setItem(r, 1, QTableWidgetItem(query))
-        self._hist_table.horizontalHeader().resizeSectionsToContents()
+        self._hist_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
 
     def _hist_rerun(self):
         row = self._hist_table.currentRow()
