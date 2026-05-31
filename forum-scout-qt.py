@@ -141,7 +141,8 @@ _EN_STRINGS = {
     "col_date":    "Added",
     "col_created": "Created",
     "col_last":    "Last reply",
-    "bm_refresh":  "Refresh",
+    "bm_refresh":        "Refresh reply",
+    "ctx_bm_refresh":    "Refresh reply",
 }
 
 def _load_translation(lang: str) -> dict:
@@ -216,6 +217,24 @@ def _fmt_date(iso: str) -> str:
         ).strftime("%Y-%m-%d")
     except Exception:
         return ""
+
+
+def _locale_date(s: str) -> str:
+    if s in ("—", ""):
+        return s
+    try:
+        return datetime.date.fromisoformat(s[:10]).strftime("%x")
+    except Exception:
+        return s
+
+
+def _locale_datetime(s: str) -> str:
+    if not s:
+        return s
+    try:
+        return datetime.datetime.fromisoformat(s).strftime("%x %H:%M")
+    except Exception:
+        return s
 
 
 class _ForumUnreachable(Exception):
@@ -391,18 +410,15 @@ class _AddedDateDelegate(QStyledItemDelegate):
     _TIME_COLOR = QColor("#fb8c00")
 
     def paint(self, painter, option, index):
-        self.initStyleOption(option, index)
-        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
-        parts = text.split(" ", 1)
-        if len(parts) < 2:
-            super().paint(painter, option, index)
-            return
+        iso = index.data(Qt.ItemDataRole.UserRole) or ""
+        parts = iso.split(" ", 1)
         today = datetime.date.today().isoformat()
-        if parts[0] != today:
-            option.text = parts[0]
+        if parts[0] != today or len(parts) < 2:
+            # DisplayRole already has locale-formatted date
             super().paint(painter, option, index)
             return
         # today — draw background then orange time
+        self.initStyleOption(option, index)
         style = option.widget.style() if option.widget else QStyle()
         style.drawPrimitive(
             QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget
@@ -414,6 +430,55 @@ class _AddedDateDelegate(QStyledItemDelegate):
         painter.save()
         painter.setPen(fg if selected else self._TIME_COLOR)
         painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
+        painter.restore()
+
+
+class _DateItem(QTableWidgetItem):
+    """QTableWidgetItem that displays locale date but sorts by ISO UserRole."""
+    def __lt__(self, other):
+        a = self.data(Qt.ItemDataRole.UserRole) or ""
+        b = other.data(Qt.ItemDataRole.UserRole) or ""
+        return a < b
+
+
+def _date_item(iso: str) -> _DateItem:
+    item = _DateItem(_locale_date(iso))
+    item.setData(Qt.ItemDataRole.UserRole, iso)
+    return item
+
+
+def _datetime_item(iso: str) -> _DateItem:
+    item = _DateItem(_locale_datetime(iso))
+    item.setData(Qt.ItemDataRole.UserRole, iso)
+    return item
+
+
+class _HistTimeDelegate(QStyledItemDelegate):
+    """Draws history Time cell: date in normal color, time in orange (white when selected)."""
+    _TIME_COLOR = QColor("#fb8c00")
+
+    def paint(self, painter, option, index):
+        self.initStyleOption(option, index)
+        parts = option.text.split(" ", 1)
+        if len(parts) < 2:
+            super().paint(painter, option, index)
+            return
+        date_str, time_str = parts
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        style = option.widget.style() if option.widget else QStyle()
+        option.text = ""
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
+        text_role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
+        fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
+        rect = option.rect.adjusted(4, 0, -4, 0)
+        painter.save()
+        fm = painter.fontMetrics()
+        date_w = fm.horizontalAdvance(date_str + " ")
+        painter.setPen(fg)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, date_str + " ")
+        time_rect = rect.adjusted(date_w, 0, 0, 0)
+        painter.setPen(fg if selected else self._TIME_COLOR)
+        painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter, time_str)
         painter.restore()
 
 
@@ -836,6 +901,7 @@ class ScoutWindow(QMainWindow):
         self._hist_table.setShowGrid(False)
         self._hist_table.verticalHeader().setVisible(False)
         self._hist_table.setSortingEnabled(False)
+        self._hist_table.setItemDelegateForColumn(0, _HistTimeDelegate(self._hist_table))
         self._hist_table.itemDoubleClicked.connect(self._on_hist_double_click)
         self._hist_table.installEventFilter(self)
         v.addWidget(self._hist_table)
@@ -1114,8 +1180,8 @@ class ScoutWindow(QMainWindow):
             font_t.setWeight(QFont.Weight.DemiBold)
             item_t.setFont(font_t)
 
-            item_d  = QTableWidgetItem(date)
-            item_la = QTableWidgetItem(last_activity)
+            item_d  = _date_item(date)
+            item_la = _date_item(last_activity)
 
             item_s = QTableWidgetItem("✓" if solved else "")
             item_s.setForeground(QBrush(QColor("#4caf50")))
@@ -1367,8 +1433,10 @@ class ScoutWindow(QMainWindow):
 
             self._bm_table.setItem(r, 0, item_f)
             self._bm_table.setItem(r, 1, item_t)
-            self._bm_table.setItem(r, 2, QTableWidgetItem(date))
-            self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
+            item_added = _DateItem(_locale_date(date[:10]))
+            item_added.setData(Qt.ItemDataRole.UserRole, date)
+            self._bm_table.setItem(r, 2, item_added)
+            self._bm_table.setItem(r, 3, _date_item(last_activity))
             self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
         self._bm_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
@@ -1427,12 +1495,13 @@ class ScoutWindow(QMainWindow):
 
         menu = QMenu(self)
         n = len(selected)
-        if n == 1:
-            menu.addAction(S["ctx_open"],      lambda: self._open_url(link))
-            menu.addAction(S["ctx_bm_remove"], lambda: self._bm_remove_by_link(link))
-        else:
-            menu.addAction(f"Open {n} in browser",    self._bm_open)
-            menu.addAction(f"Remove {n} bookmark(s)", self._bm_remove)
+        label_open   = S["bm_open"]   if n == 1 else f"{S['bm_open']} ({n})"
+        label_remove = S["bm_del"]    if n == 1 else f"{S['bm_del']} ({n})"
+        menu.addAction(label_open,        self._bm_open)
+        menu.addAction(S["bm_copy"],      self._bm_copy)
+        menu.addSeparator()
+        menu.addAction(label_remove,      self._bm_remove)
+        menu.addAction(S["ctx_bm_refresh"], self._bm_refresh_activity)
         menu.exec(self._bm_table.viewport().mapToGlobal(pos))
 
     def _bm_open(self):
@@ -1576,9 +1645,10 @@ class ScoutWindow(QMainWindow):
                 if item and item.data(Qt.ItemDataRole.UserRole) == url:
                     la_item = self._bm_table.item(r, 3)
                     if la_item:
-                        la_item.setText(last_activity)
+                        la_item.setText(_locale_date(last_activity))
+                        la_item.setData(Qt.ItemDataRole.UserRole, last_activity)
                     else:
-                        self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
+                        self._bm_table.setItem(r, 3, _date_item(last_activity))
                     if solved:
                         s_item = self._bm_table.item(r, 4)
                         if s_item:
@@ -1601,10 +1671,29 @@ class ScoutWindow(QMainWindow):
     # ── History ───────────────────────────────────────────────────────────────
     def _log_history(self, query: str):
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(HISTORY_FILE, "a") as f:
-            f.write(f"{ts} - {query}\n")
+        existing = []
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        _, q = line.split(" - ", 1)
+                        if q != query:
+                            existing.append(line)
+                    except Exception:
+                        existing.append(line)
+        existing.append(f"{ts} - {query}")
+        with open(HISTORY_FILE, "w") as f:
+            f.write("\n".join(existing) + "\n")
+        for r in range(self._hist_table.rowCount()):
+            item = self._hist_table.item(r, 1)
+            if item and item.text() == query:
+                self._hist_table.removeRow(r)
+                break
         self._hist_table.insertRow(0)
-        self._hist_table.setItem(0, 0, QTableWidgetItem(ts))
+        self._hist_table.setItem(0, 0, _datetime_item(ts))
         self._hist_table.setItem(0, 1, QTableWidgetItem(query))
         self._completion_add(query)
 
@@ -1612,7 +1701,7 @@ class ScoutWindow(QMainWindow):
         self._hist_table.setRowCount(0)
         if not os.path.exists(HISTORY_FILE):
             return
-        rows = []
+        seen: dict[str, str] = {}
         with open(HISTORY_FILE) as f:
             for line in f:
                 line = line.strip()
@@ -1620,15 +1709,16 @@ class ScoutWindow(QMainWindow):
                     continue
                 try:
                     ts, query = line.split(" - ", 1)
-                    rows.append((ts, query))
+                    seen[query] = ts
                 except Exception:
                     pass
-        for ts, query in reversed(rows):
+        for query, ts in sorted(seen.items(), key=lambda x: x[1], reverse=True):
             r = self._hist_table.rowCount()
             self._hist_table.insertRow(r)
-            self._hist_table.setItem(r, 0, QTableWidgetItem(ts))
+            self._hist_table.setItem(r, 0, _datetime_item(ts))
             self._hist_table.setItem(r, 1, QTableWidgetItem(query))
-        self._hist_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
+        self._hist_table.horizontalHeader().resizeSections(
+            QHeaderView.ResizeMode.ResizeToContents)
 
     def _hist_rerun(self):
         row = self._hist_table.currentRow()
