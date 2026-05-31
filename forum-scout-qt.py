@@ -141,7 +141,7 @@ _EN_STRINGS = {
     "col_date":    "Added",
     "col_created": "Created",
     "col_last":    "Last reply",
-    "bm_refresh":        "Refresh reply",
+    "bm_refresh":        "Refresh",
     "ctx_bm_refresh":    "Refresh reply",
 }
 
