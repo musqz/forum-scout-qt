@@ -1872,6 +1872,7 @@ class ScoutWindow(QMainWindow):
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    locale.setlocale(locale.LC_TIME, "")
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
     app.setApplicationVersion(_VERSION)
