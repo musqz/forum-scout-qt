@@ -775,7 +775,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
-        self._bm_table.setColumnWidth(2, 132)
+        self._bm_table.setColumnWidth(2, 130)
         self._bm_table.setColumnWidth(3, 79)
         self._bm_table.setColumnWidth(4, 22)
         self._bm_table.setItemDelegateForColumn(2, _AddedDateDelegate(self._bm_table))
