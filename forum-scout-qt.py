@@ -716,10 +716,10 @@ class ScoutWindow(QMainWindow):
             S["col_n"], S["col_forum"], S["col_title"], S["col_created"], S["col_last"], "✓"
         ])
         self._res_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self._res_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self._res_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
         self._res_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self._res_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self._res_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self._res_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        self._res_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
         self._res_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         self._res_table.setColumnWidth(0, 30)
         self._res_table.setColumnWidth(1, 150)
@@ -781,10 +781,10 @@ class ScoutWindow(QMainWindow):
         self._bm_table.setHorizontalHeaderLabels([
             S["col_forum"], S["col_title"], S["col_date"], S["col_last"], "✓"
         ])
-        self._bm_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._bm_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         self._bm_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._bm_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self._bm_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         self._bm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
         self._bm_table.setColumnWidth(2, 82)
@@ -828,7 +828,7 @@ class ScoutWindow(QMainWindow):
 
         self._hist_table = QTableWidget(0, 2)
         self._hist_table.setHorizontalHeaderLabels([S["col_time"], S["col_query"]])
-        self._hist_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self._hist_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         self._hist_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._hist_table.setColumnWidth(0, 160)
         self._hist_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1157,6 +1157,7 @@ class ScoutWindow(QMainWindow):
             self._btn.setEnabled(True)
             self._busy = False
             self._res_table.setSortingEnabled(True)
+            self._res_table.horizontalHeader().resizeSectionsToContents()
 
         if new_results and not self._tab_switched:
             self._notebook.setCurrentIndex(0)
@@ -1370,6 +1371,7 @@ class ScoutWindow(QMainWindow):
             self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
             self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
+        self._bm_table.horizontalHeader().resizeSectionsToContents()
 
     def _load_bookmarks(self):
         self._bm_data = []
@@ -1626,6 +1628,7 @@ class ScoutWindow(QMainWindow):
             self._hist_table.insertRow(r)
             self._hist_table.setItem(r, 0, QTableWidgetItem(ts))
             self._hist_table.setItem(r, 1, QTableWidgetItem(query))
+        self._hist_table.horizontalHeader().resizeSectionsToContents()
 
     def _hist_rerun(self):
         row = self._hist_table.currentRow()
