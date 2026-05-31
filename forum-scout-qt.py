@@ -405,9 +405,10 @@ _SEED_TERMS = [
 ]
 
 
+_ORANGE = QColor("#fb8c00")
+
 # ─── Added-date delegate (today → orange time, older → date) ─────────────────
 class _AddedDateDelegate(QStyledItemDelegate):
-    _TIME_COLOR = QColor("#fb8c00")
 
     def paint(self, painter, option, index):
         iso = index.data(Qt.ItemDataRole.UserRole) or ""
@@ -428,7 +429,7 @@ class _AddedDateDelegate(QStyledItemDelegate):
         fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
         rect = option.rect.adjusted(4, 0, -4, 0)
         painter.save()
-        painter.setPen(fg if selected else self._TIME_COLOR)
+        painter.setPen(fg if selected else _ORANGE)
         painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
         painter.restore()
 
@@ -455,7 +456,6 @@ def _datetime_item(iso: str) -> _DateItem:
 
 class _HistTimeDelegate(QStyledItemDelegate):
     """Draws history Time cell: date in normal color, time in orange (white when selected)."""
-    _TIME_COLOR = QColor("#fb8c00")
 
     def paint(self, painter, option, index):
         self.initStyleOption(option, index)
@@ -477,7 +477,7 @@ class _HistTimeDelegate(QStyledItemDelegate):
         painter.setPen(fg)
         painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, date_str + " ")
         time_rect = rect.adjusted(date_w, 0, 0, 0)
-        painter.setPen(fg if selected else self._TIME_COLOR)
+        painter.setPen(fg if selected else _ORANGE)
         painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter, time_str)
         painter.restore()
 
@@ -1433,9 +1433,7 @@ class ScoutWindow(QMainWindow):
 
             self._bm_table.setItem(r, 0, item_f)
             self._bm_table.setItem(r, 1, item_t)
-            item_added = _DateItem(_locale_date(date[:10]))
-            item_added.setData(Qt.ItemDataRole.UserRole, date)
-            self._bm_table.setItem(r, 2, item_added)
+            self._bm_table.setItem(r, 2, _date_item(date))
             self._bm_table.setItem(r, 3, _date_item(last_activity))
             self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
