@@ -20,6 +20,7 @@ try:
         QLineEdit, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
         QHeaderView, QStatusBar, QLabel, QSpinBox, QCheckBox, QMenu,
         QMessageBox, QAbstractItemView, QSizePolicy, QGridLayout, QFrame, QLayout,
+        QStyledItemDelegate, QStyle,
     )
     from PyQt6.QtCore import (
         Qt, QTimer, QObject, pyqtSignal, QSortFilterProxyModel, QStringListModel,
@@ -27,7 +28,7 @@ try:
     )
     from PyQt6.QtGui import (
         QColor, QFont, QKeySequence, QShortcut, QFontMetrics, QBrush,
-        QAction,
+        QAction, QPalette,
     )
     from PyQt6.QtWidgets import QCompleter
 except ImportError:
@@ -373,6 +374,35 @@ _SEED_TERMS = [
     "firefox slow", "steam not launching", "flatpak permission",
     "wine not working", "virtualbox error",
 ]
+
+
+# ─── Added-date delegate (date normal, time orange) ──────────────────────────
+class _AddedDateDelegate(QStyledItemDelegate):
+    _TIME_COLOR = QColor("#fb8c00")
+
+    def paint(self, painter, option, index):
+        self.initStyleOption(option, index)
+        text = index.data(Qt.ItemDataRole.DisplayRole) or ""
+        parts = text.split(" ", 1)
+        if len(parts) < 2:
+            super().paint(painter, option, index)
+            return
+        style = option.widget.style() if option.widget else QStyle()
+        style.drawPrimitive(
+            QStyle.PrimitiveElement.PE_PanelItemViewItem, option, painter, option.widget
+        )
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        text_role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
+        fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
+        rect = option.rect.adjusted(4, 0, -4, 0)
+        date_w = option.fontMetrics.horizontalAdvance(parts[0] + " ")
+        painter.save()
+        painter.setPen(fg)
+        painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[0] + " ")
+        time_rect = rect.adjusted(date_w, 0, 0, 0)
+        painter.setPen(self._TIME_COLOR)
+        painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
+        painter.restore()
 
 
 # ─── Worker signals (thread → main thread) ───────────────────────────────────
@@ -745,9 +775,10 @@ class ScoutWindow(QMainWindow):
         self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
-        self._bm_table.setColumnWidth(2, 79)
+        self._bm_table.setColumnWidth(2, 110)
         self._bm_table.setColumnWidth(3, 79)
         self._bm_table.setColumnWidth(4, 22)
+        self._bm_table.setItemDelegateForColumn(2, _AddedDateDelegate(self._bm_table))
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._bm_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._bm_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1267,7 +1298,7 @@ class ScoutWindow(QMainWindow):
 
     # ── Bookmarks ─────────────────────────────────────────────────────────────
     def _add_bookmark(self, forum: str, title: str, link: str, solved: str = ""):
-        date  = datetime.datetime.now().strftime("%Y-%m-%d")
+        date  = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         color = _FORUM_COLOR.get(forum, "#cdd6f4")
         with open(BOOKMARK_FILE, "a") as f:
             f.write(f"[{forum}] {title} - {link}|||{date}|||{solved}|||\n")
@@ -1335,7 +1366,7 @@ class ScoutWindow(QMainWindow):
                     rest  = line.split("] ", 1)[1]
                     parts         = rest.split("|||")
                     body          = parts[0]
-                    date          = (parts[1].strip().split()[0] if len(parts) > 1 else "")
+                    date          = (parts[1].strip() if len(parts) > 1 else "")
                     solved        = parts[2] if len(parts) > 2 else ""
                     last_activity = parts[3].strip() if len(parts) > 3 else ""
                     cut = body.rfind(" - http")
