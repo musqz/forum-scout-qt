@@ -17,8 +17,8 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 - **Multi-source search** — query Discourse forums, Arch Wiki and Arch BBS in one go
 - **Sortable results** — click any column header to sort by forum, title or date
 - **Multi-select** — select multiple results to open all at once, or add/remove bookmarks in one action; right-click for context menu
-- **Bookmarks** — save topics, open or copy links, filter and sort · results marked ★ when already bookmarked · add/remove directly from the results list · multi-select delete with `Del` · undo last delete with `Ctrl+Z`
-- **Search history** — re-run any previous search with one click
+- **Bookmarks** — save topics, open or copy links, filter and sort · results marked ★ when already bookmarked · add/remove directly from the results list · multi-select delete with `Del` · undo last delete with `Ctrl+Z` · right-click for full context menu (Open, Copy link, Remove, Refresh reply)
+- **Search history** — re-run any previous search with one click · deduplicates entries, re-running a search updates its timestamp
 - **Forums toggle** — hide the forum selector with the **Forums ▾** button to free up space for results
 - **Dropdown suggestions** — live topic suggestions as you type (press Space)
 - **Color-coded forums** — consistent colors across Results and Bookmarks tabs
@@ -27,6 +27,7 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 - **Persistent settings** — window size, hits per source, active forums and forums bar state saved on exit
 - **Custom forums** — add, remove or reorder forums via `forums.conf`; supports Discourse, MediaWiki and DuckDuckGo site-search types
 - **Shared config with GTK version** — bookmarks, history, settings and forums are fully compatible; switching between the GTK and Qt versions loses nothing
+- **Locale dates** — date columns display in the system locale's format (e.g. `31-05-26` in NL, `05/31/26` in US); sort order stays correct
 - **Multilingual** — 18 languages auto-detected from `$LANG`: Arabic, Chinese, Danish, Dutch, English, Farsi, French, German, Greek, Hebrew, Japanese, Polish, Portuguese, Romanian, Russian, Spanish, Turkish, Ukrainian
 
 ---
