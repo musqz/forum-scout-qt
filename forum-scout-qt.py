@@ -1027,6 +1027,14 @@ class ScoutWindow(QMainWindow):
 
     # ── Search logic ──────────────────────────────────────────────────────────
     def _on_search(self):
+        if self._suggest_timer:
+            self._suggest_timer.stop()
+            self._suggest_timer = None
+        self._suggest_token += 1
+        c = self._entry.completer()
+        if c:
+            c.popup().hide()
+
         query = self._entry.text().strip()
         if not query or self._busy:
             return
