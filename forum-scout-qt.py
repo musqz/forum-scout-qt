@@ -137,6 +137,9 @@ _EN_STRINGS = {
     "hist_clear":  "Clear history",
     "via_ddg":     " ⁽ᴰᴰᴳ⁾",
     "col_date":    "Added",
+    "col_created": "Created",
+    "col_last":    "Last reply",
+    "bm_refresh":  "Refresh",
 }
 
 def _load_translation(lang: str) -> dict:
@@ -228,10 +231,11 @@ def _fetch_discourse(forum: dict, query: str, hits: int) -> list[tuple[str, str,
         out = []
         base = forum["url"]
         for t in data.get("topics", [])[:hits]:
-            link   = f"{base}/t/{t['slug']}/{t['id']}"
-            date   = _fmt_date(t.get("created_at", ""))
-            solved = bool(t.get("has_accepted_answer", False))
-            out.append((t["title"], link, date, solved))
+            link          = f"{base}/t/{t['slug']}/{t['id']}"
+            date          = _fmt_date(t.get("created_at", ""))
+            last_activity = _fmt_date(t.get("last_posted_at", ""))
+            solved        = bool(t.get("has_accepted_answer", False))
+            out.append((t["title"], link, date, last_activity, solved))
         return out
     except _NET_ERRORS:
         raise _ForumUnreachable
@@ -259,7 +263,7 @@ def _fetch_mediawiki(forum: dict, query: str, hits: int) -> list[tuple[str, str,
         for item in data.get("query", {}).get("search", []):
             slug = urllib.parse.quote(item["title"].replace(" ", "_"))
             date = _fmt_date(item.get("timestamp", ""))
-            out.append((item["title"], f"{base}/{page_tpl.format(slug=slug)}", date, False))
+            out.append((item["title"], f"{base}/{page_tpl.format(slug=slug)}", date, "", False))
         return out
     except _NET_ERRORS:
         raise _ForumUnreachable
@@ -281,7 +285,7 @@ def _fetch_ddg(forum: dict, query: str, hits: int) -> list[tuple[str, str, str]]
         out = []
         for title, link in parser.results:
             if site in link:
-                out.append((title, link, "—", False))
+                out.append((title, link, "—", "", False))
                 if len(out) >= hits:
                     break
         return out
@@ -373,8 +377,9 @@ _SEED_TERMS = [
 
 # ─── Worker signals (thread → main thread) ───────────────────────────────────
 class _WorkerSignals(QObject):
-    forum_done   = pyqtSignal(list, object, object)   # results, ddg_empty, unreachable
-    suggest_done = pyqtSignal(list, int)              # suggestions, token
+    forum_done       = pyqtSignal(list, object, object)   # results, ddg_empty, unreachable
+    suggest_done     = pyqtSignal(list, int)              # suggestions, token
+    bm_item_updated  = pyqtSignal(str, str, str)          # url, last_activity, solved
 
 
 # ─── Multi-word completer proxy ───────────────────────────────────────────────
@@ -496,11 +501,15 @@ class ScoutWindow(QMainWindow):
         self._bm_bulk_confirm    = True
         self._bm_undo_data       = []
         self._hover_link         = None
+        self._bm_refreshing      = False
+        self._bm_refresh_total   = 0
+        self._bm_refresh_done    = 0
 
         # Worker signals live on main thread (QObject), emitted from worker threads
         self._signals = _WorkerSignals()
         self._signals.forum_done.connect(self._add_forum_results)
         self._signals.suggest_done.connect(self._apply_live_suggestions)
+        self._signals.bm_item_updated.connect(self._on_bm_item_updated)
 
         self._build_ui()
         self._load_settings()
@@ -631,6 +640,7 @@ class ScoutWindow(QMainWindow):
             ("Ctrl+B",          "Bookmark / un-bookmark selected result(s)"),
             ("Del",             "Delete selected bookmark(s)"),
             ("Ctrl+Z",          "Undo last bookmark delete"),
+            ("Ctrl+R",          "Refresh bookmark activity"),
             ("Ctrl+Tab",        "Switch tabs"),
             ("?",               "Show this help"),
         ]):
@@ -659,19 +669,21 @@ class ScoutWindow(QMainWindow):
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
 
-        self._res_table = QTableWidget(0, 5)
+        self._res_table = QTableWidget(0, 6)
         self._res_table.setHorizontalHeaderLabels([
-            S["col_n"], S["col_forum"], S["col_title"], S["col_date"], "✓"
+            S["col_n"], S["col_forum"], S["col_title"], S["col_created"], S["col_last"], "✓"
         ])
         self._res_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._res_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         self._res_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self._res_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
         self._res_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self._res_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
         self._res_table.setColumnWidth(0, 30)
         self._res_table.setColumnWidth(1, 150)
         self._res_table.setColumnWidth(3, 79)
-        self._res_table.setColumnWidth(4, 22)
+        self._res_table.setColumnWidth(4, 79)
+        self._res_table.setColumnWidth(5, 22)
         self._res_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._res_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._res_table.setShowGrid(False)
@@ -703,12 +715,16 @@ class ScoutWindow(QMainWindow):
         tb = QHBoxLayout()
         tb.setSpacing(4)
         for label, cb in [
-            (S["bm_open"], self._bm_open),
-            (S["bm_copy"], self._bm_copy),
-            (S["bm_del"],  self._bm_remove),
+            (S["bm_open"],    self._bm_open),
+            (S["bm_copy"],    self._bm_copy),
+            (S["bm_del"],     self._bm_remove),
+            (S["bm_refresh"], self._bm_refresh_activity),
         ]:
             btn = QPushButton(label)
             btn.clicked.connect(cb)
+            if label == S["bm_refresh"]:
+                btn.setToolTip("Refresh last activity (Ctrl+R)")
+                self._bm_refresh_btn = btn
             tb.addWidget(btn)
         tb.addStretch()
 
@@ -719,15 +735,19 @@ class ScoutWindow(QMainWindow):
         tb.addWidget(self._undo_btn)
         v.addLayout(tb)
 
-        self._bm_table = QTableWidget(0, 4)
-        self._bm_table.setHorizontalHeaderLabels([S["col_forum"], S["col_title"], S["col_date"], "✓"])
+        self._bm_table = QTableWidget(0, 5)
+        self._bm_table.setHorizontalHeaderLabels([
+            S["col_forum"], S["col_title"], S["col_date"], S["col_last"], "✓"
+        ])
         self._bm_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self._bm_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
         self._bm_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self._bm_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         self._bm_table.setColumnWidth(0, 130)
         self._bm_table.setColumnWidth(2, 79)
-        self._bm_table.setColumnWidth(3, 22)
+        self._bm_table.setColumnWidth(3, 79)
+        self._bm_table.setColumnWidth(4, 22)
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._bm_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._bm_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -741,6 +761,7 @@ class ScoutWindow(QMainWindow):
         v.addWidget(self._bm_table)
 
         self._load_bookmarks()
+        QTimer.singleShot(0, self._bm_refresh_activity)
         return w
 
     # ── History tab ───────────────────────────────────────────────────────────
@@ -1012,14 +1033,14 @@ class ScoutWindow(QMainWindow):
             unreachable = forum["name"]
         via_ddg = forum["type"] == "ddg"
         results = [
-            (forum["name"], forum["color"], title, link, date, via_ddg, solved)
-            for title, link, date, solved in items
+            (forum["name"], forum["color"], title, link, date, last_activity, via_ddg, solved)
+            for title, link, date, last_activity, solved in items
         ]
         ddg_empty = forum["name"] if via_ddg and not items and not unreachable else None
         self._signals.forum_done.emit(results, ddg_empty, unreachable)
 
     def _add_forum_results(self, new_results: list, ddg_empty_name, unreachable_name):
-        for forum, color, title, link, date, via_ddg, solved in new_results:
+        for forum, color, title, link, date, last_activity, via_ddg, solved in new_results:
             self._search_idx += 1
             display = forum + (S["via_ddg"] if via_ddg else "")
             marker  = "★" if link in self._bm_urls else ""
@@ -1042,7 +1063,8 @@ class ScoutWindow(QMainWindow):
             font_t.setWeight(QFont.Weight.DemiBold)
             item_t.setFont(font_t)
 
-            item_d = QTableWidgetItem(date)
+            item_d  = QTableWidgetItem(date)
+            item_la = QTableWidgetItem(last_activity)
 
             item_s = QTableWidgetItem("✓" if solved else "")
             item_s.setForeground(QBrush(QColor("#4caf50")))
@@ -1052,9 +1074,10 @@ class ScoutWindow(QMainWindow):
             self._res_table.setItem(row, 1, item_f)
             self._res_table.setItem(row, 2, item_t)
             self._res_table.setItem(row, 3, item_d)
-            self._res_table.setItem(row, 4, item_s)
+            self._res_table.setItem(row, 4, item_la)
+            self._res_table.setItem(row, 5, item_s)
 
-            self._results.append((self._search_idx, forum, color, title, link, date, via_ddg, solved))
+            self._results.append((self._search_idx, forum, color, title, link, date, last_activity, via_ddg, solved))
 
         if ddg_empty_name:
             self._ddg_empty.append(ddg_empty_name)
@@ -1146,7 +1169,7 @@ class ScoutWindow(QMainWindow):
             link  = links[0]
             forum = self._res_table.item(row, 1).text() if self._res_table.item(row, 1) else ""
             title = self._res_table.item(row, 2).text() if self._res_table.item(row, 2) else ""
-            solved_item = self._res_table.item(row, 4)
+            solved_item = self._res_table.item(row, 5)
             solved = solved_item.text() if solved_item else ""
             already_bm = link in {r[2] for r in self._bm_data}
             menu.addAction(S["ctx_open"], lambda: self._open_url(link))
@@ -1219,7 +1242,7 @@ class ScoutWindow(QMainWindow):
                 continue
             forum = self._res_table.item(r, 1).text() if self._res_table.item(r, 1) else ""
             title = self._res_table.item(r, 2).text() if self._res_table.item(r, 2) else ""
-            solved_item = self._res_table.item(r, 4)
+            solved_item = self._res_table.item(r, 5)
             solved = solved_item.text() if solved_item else ""
             self._add_bookmark(forum, title, link, solved)
             bm_urls.add(link)
@@ -1247,8 +1270,8 @@ class ScoutWindow(QMainWindow):
         date  = datetime.datetime.now().strftime("%Y-%m-%d")
         color = _FORUM_COLOR.get(forum, "#cdd6f4")
         with open(BOOKMARK_FILE, "a") as f:
-            f.write(f"[{forum}] {title} - {link}|||{date}|||{solved}\n")
-        self._bm_data.append([forum, title, link, date, color, solved])
+            f.write(f"[{forum}] {title} - {link}|||{date}|||{solved}|||\n")
+        self._bm_data.append([forum, title, link, date, color, solved, ""])
         self._bm_refresh()
         self._mark_result_bookmarked(link, True)
         self._set_status(S["bm_added"].format(title))
@@ -1268,7 +1291,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.setSortingEnabled(False)
         self._bm_table.setRowCount(0)
         for row in self._bm_data:
-            forum, title, link, date, color, solved = row
+            forum, title, link, date, color, solved, last_activity = row
             if text and not (text in forum.lower() or text in title.lower() or text in link.lower()):
                 continue
             r = self._bm_table.rowCount()
@@ -1293,7 +1316,8 @@ class ScoutWindow(QMainWindow):
             self._bm_table.setItem(r, 0, item_f)
             self._bm_table.setItem(r, 1, item_t)
             self._bm_table.setItem(r, 2, QTableWidgetItem(date))
-            self._bm_table.setItem(r, 3, item_s)
+            self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
+            self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
 
     def _load_bookmarks(self):
@@ -1309,17 +1333,18 @@ class ScoutWindow(QMainWindow):
                 try:
                     forum = line.split("]")[0].lstrip("[")
                     rest  = line.split("] ", 1)[1]
-                    parts  = rest.split("|||")
-                    body   = parts[0]
-                    date   = (parts[1].strip().split()[0] if len(parts) > 1 else "")
-                    solved = parts[2] if len(parts) > 2 else ""
+                    parts         = rest.split("|||")
+                    body          = parts[0]
+                    date          = (parts[1].strip().split()[0] if len(parts) > 1 else "")
+                    solved        = parts[2] if len(parts) > 2 else ""
+                    last_activity = parts[3].strip() if len(parts) > 3 else ""
                     cut = body.rfind(" - http")
                     if cut == -1:
                         cut = body.rfind(" - ")
                     title = body[:cut]
                     link  = body[cut + 3:]
                     color = _FORUM_COLOR.get(forum, "#cdd6f4")
-                    self._bm_data.append([forum, title, link, date, color, solved])
+                    self._bm_data.append([forum, title, link, date, color, solved, last_activity])
                 except Exception:
                     pass
         self._bm_refresh()
@@ -1438,8 +1463,8 @@ class ScoutWindow(QMainWindow):
 
     def _save_bookmarks(self):
         with open(BOOKMARK_FILE, "w") as fh:
-            for f, t, l, d, _, s in self._bm_data:
-                fh.write(f"[{f}] {t} - {l}|||{d}|||{s}\n")
+            for f, t, l, d, _, s, la in self._bm_data:
+                fh.write(f"[{f}] {t} - {l}|||{d}|||{s}|||{la}\n")
 
     def _on_bm_double_click(self, item):
         link = None
@@ -1448,6 +1473,73 @@ class ScoutWindow(QMainWindow):
                 link = col_item.data(Qt.ItemDataRole.UserRole)
         if link:
             self._open_url(link)
+
+    def _bm_refresh_activity(self):
+        if self._bm_refreshing:
+            return
+        targets = [
+            bm for bm in self._bm_data
+            if any(f["name"] == bm[0] and f["type"] == "discourse" for f in FORUMS)
+        ]
+        if not targets:
+            return
+        self._bm_refreshing    = True
+        self._bm_refresh_total = len(targets)
+        self._bm_refresh_done  = 0
+        self._set_status(f"Refreshing bookmarks… (0/{self._bm_refresh_total})")
+        threading.Thread(
+            target=self._bm_refresh_thread,
+            args=(list(targets),),
+            daemon=True,
+        ).start()
+
+    def _bm_refresh_thread(self, snapshot: list):
+        for bm in snapshot:
+            url        = bm[2]
+            forum_name = bm[0]
+            forum = next((f for f in FORUMS if f["name"] == forum_name), None)
+            la, solved = "", ""
+            if forum and forum["type"] == "discourse":
+                try:
+                    topic_id = int(url.rstrip("/").split("/")[-1])
+                    r    = _session.get(f"{forum['url']}/t/{topic_id}.json", timeout=9)
+                    data = r.json()
+                    la     = _fmt_date(data.get("last_posted_at", ""))
+                    solved = "✓" if data.get("has_accepted_answer", False) else ""
+                except Exception:
+                    pass
+            self._signals.bm_item_updated.emit(url, la, solved)
+
+    def _on_bm_item_updated(self, url: str, last_activity: str, solved: str):
+        if last_activity:
+            for bm in self._bm_data:
+                if bm[2] == url:
+                    bm[6] = last_activity
+                    if solved:          # only promote to solved, never clear it
+                        bm[5] = solved
+                    break
+            for r in range(self._bm_table.rowCount()):
+                item = self._bm_table.item(r, 0)
+                if item and item.data(Qt.ItemDataRole.UserRole) == url:
+                    la_item = self._bm_table.item(r, 3)
+                    if la_item:
+                        la_item.setText(last_activity)
+                    else:
+                        self._bm_table.setItem(r, 3, QTableWidgetItem(last_activity))
+                    if solved:
+                        s_item = self._bm_table.item(r, 4)
+                        if s_item:
+                            s_item.setText(solved)
+                    break
+        self._bm_refresh_done += 1
+        if self._bm_refresh_done >= self._bm_refresh_total:
+            self._bm_refreshing = False
+            self._save_bookmarks()
+            self._set_status(f"Bookmarks refreshed ({self._bm_refresh_total}).")
+        else:
+            self._set_status(
+                f"Refreshing bookmarks… ({self._bm_refresh_done}/{self._bm_refresh_total})"
+            )
 
     def _on_bm_del_key(self):
         if self._notebook.currentIndex() == 1:
@@ -1526,6 +1618,7 @@ class ScoutWindow(QMainWindow):
         QShortcut(QKeySequence("Escape"),      self).activated.connect(self._clear_search)
         QShortcut(QKeySequence("Delete"),      self).activated.connect(self._on_bm_del_key)
         QShortcut(QKeySequence("Ctrl+Z"),      self).activated.connect(self._bm_undo)
+        QShortcut(QKeySequence("Ctrl+R"),      self).activated.connect(self._bm_refresh_activity)
         QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self._on_results_open_selected)
         QShortcut(QKeySequence("Ctrl+B"),      self).activated.connect(self._on_results_bookmark_selected)
         QShortcut(QKeySequence("?"),           self).activated.connect(self._show_shortcuts)
