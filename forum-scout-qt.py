@@ -400,7 +400,7 @@ class _AddedDateDelegate(QStyledItemDelegate):
         painter.setPen(fg)
         painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter, parts[0] + " ")
         time_rect = rect.adjusted(date_w, 0, 0, 0)
-        painter.setPen(self._TIME_COLOR)
+        painter.setPen(fg if selected else self._TIME_COLOR)
         painter.drawText(time_rect, Qt.AlignmentFlag.AlignVCenter, parts[1])
         painter.restore()
 
