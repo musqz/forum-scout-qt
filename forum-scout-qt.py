@@ -449,26 +449,45 @@ def _date_item(iso: str) -> _DateItem:
 
 
 def _datetime_item(iso: str) -> _DateItem:
-    item = _DateItem(_locale_datetime(iso))
+    today = datetime.date.today().isoformat()
+    if iso.startswith(today):
+        display = datetime.datetime.fromisoformat(iso).strftime("%H:%M")
+    else:
+        display = _locale_datetime(iso)
+    item = _DateItem(display)
     item.setData(Qt.ItemDataRole.UserRole, iso)
     return item
 
 
 class _HistTimeDelegate(QStyledItemDelegate):
-    """Draws history Time cell: date in normal color, time in orange (white when selected)."""
+    """Draws history Time cell: today → orange time only; older → date + orange time."""
 
     def paint(self, painter, option, index):
         self.initStyleOption(option, index)
+        iso = index.data(Qt.ItemDataRole.UserRole) or ""
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        style = option.widget.style() if option.widget else QStyle()
+        text_role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
+
+        if iso.startswith(datetime.date.today().isoformat()):
+            option.text = ""
+            style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
+            fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
+            rect = option.rect.adjusted(4, 0, -4, 0)
+            painter.save()
+            painter.setPen(fg if selected else _ORANGE)
+            painter.drawText(rect, Qt.AlignmentFlag.AlignVCenter,
+                             datetime.datetime.fromisoformat(iso).strftime("%H:%M"))
+            painter.restore()
+            return
+
         parts = option.text.split(" ", 1)
         if len(parts) < 2:
             super().paint(painter, option, index)
             return
         date_str, time_str = parts
-        selected = bool(option.state & QStyle.StateFlag.State_Selected)
-        style = option.widget.style() if option.widget else QStyle()
         option.text = ""
         style.drawControl(QStyle.ControlElement.CE_ItemViewItem, option, painter, option.widget)
-        text_role = QPalette.ColorRole.HighlightedText if selected else QPalette.ColorRole.Text
         fg = option.palette.color(QPalette.ColorGroup.Normal, text_role)
         rect = option.rect.adjusted(4, 0, -4, 0)
         painter.save()
@@ -1717,6 +1736,7 @@ class ScoutWindow(QMainWindow):
             self._hist_table.setItem(r, 1, QTableWidgetItem(query))
         self._hist_table.horizontalHeader().resizeSections(
             QHeaderView.ResizeMode.ResizeToContents)
+        self._hist_table.setColumnWidth(0, self._hist_table.columnWidth(0) + 12)
 
     def _hist_rerun(self):
         row = self._hist_table.currentRow()
