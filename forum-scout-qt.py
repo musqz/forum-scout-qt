@@ -407,14 +407,24 @@ _SEED_TERMS = [
 _ORANGE = QColor("#fb8c00")
 
 # ─── Added-date delegate (today → orange time, older → date) ─────────────────
+class _LocaleDateDelegate(QStyledItemDelegate):
+    """Stores ISO YYYY-MM-DD as item text (sortable); renders as locale date."""
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.text = _locale_date(option.text)
+
+
 class _AddedDateDelegate(QStyledItemDelegate):
+
+    def initStyleOption(self, option, index):
+        super().initStyleOption(option, index)
+        option.text = _locale_date(option.text)
 
     def paint(self, painter, option, index):
         iso = index.data(Qt.ItemDataRole.UserRole) or ""
         parts = iso.split(" ", 1)
         today = datetime.date.today().isoformat()
         if parts[0] != today or len(parts) < 2:
-            # DisplayRole already has locale-formatted date
             super().paint(painter, option, index)
             return
         # today — draw background then orange time
@@ -441,8 +451,8 @@ class _DateItem(QTableWidgetItem):
         return a < b
 
 
-def _date_item(iso: str) -> _DateItem:
-    item = _DateItem(_locale_date(iso))
+def _date_item(iso: str) -> QTableWidgetItem:
+    item = QTableWidgetItem(iso)
     item.setData(Qt.ItemDataRole.UserRole, iso)
     return item
 
@@ -829,12 +839,15 @@ class ScoutWindow(QMainWindow):
         self._res_table.verticalHeader().setVisible(False)
         self._res_table.setSortingEnabled(True)
         self._res_table.setMouseTracking(True)
+        self._res_table.setItemDelegateForColumn(3, _LocaleDateDelegate(self._res_table))
+        self._res_table.setItemDelegateForColumn(4, _LocaleDateDelegate(self._res_table))
         self._res_table.itemDoubleClicked.connect(self._on_result_double_click)
         self._res_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._res_table.customContextMenuRequested.connect(self._on_result_context_menu)
         self._res_table.mouseMoveEvent = self._on_result_hover
         self._res_table.leaveEvent    = self._on_result_hover_leave
         self._res_table.installEventFilter(self)
+        self._res_table.horizontalHeader().sectionClicked.connect(self._on_res_col_clicked)
 
         v.addWidget(self._res_table)
         return w
@@ -888,6 +901,7 @@ class ScoutWindow(QMainWindow):
         self._bm_table.setColumnWidth(3, 79)
         self._bm_table.setColumnWidth(4, 22)
         self._bm_table.setItemDelegateForColumn(2, _AddedDateDelegate(self._bm_table))
+        self._bm_table.setItemDelegateForColumn(3, _LocaleDateDelegate(self._bm_table))
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._bm_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self._bm_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -1295,6 +1309,18 @@ class ScoutWindow(QMainWindow):
                 return True
         return super().eventFilter(obj, event)
 
+    # Columns 3 (Created) and 4 (Last) are dates — default first click to descending
+    _RES_DATE_COLS = (3, 4)
+
+    def _on_res_col_clicked(self, col: int) -> None:
+        if col not in self._RES_DATE_COLS:
+            return
+        header = self._res_table.horizontalHeader()
+        if header.sortIndicatorSection() != col:
+            QTimer.singleShot(0, lambda: self._res_table.sortItems(
+                col, Qt.SortOrder.DescendingOrder
+            ))
+
     def _on_result_double_click(self, item):
         link = self._result_link_for_row(item.row())
         if link:
@@ -1687,7 +1713,7 @@ class ScoutWindow(QMainWindow):
                 if item and item.data(Qt.ItemDataRole.UserRole) == url:
                     la_item = self._bm_table.item(r, 3)
                     if la_item:
-                        la_item.setText(_locale_date(last_activity))
+                        la_item.setText(last_activity)
                         la_item.setData(Qt.ItemDataRole.UserRole, last_activity)
                     else:
                         self._bm_table.setItem(r, 3, _date_item(last_activity))
