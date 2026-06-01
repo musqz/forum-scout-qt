@@ -1279,9 +1279,6 @@ class ScoutWindow(QMainWindow):
                     if text:
                         self._on_completion_selected(text)
                         return True
-                if key == Qt.Key.Key_Escape:
-                    self._completion_popup.hide()
-                    return True
         if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if obj is self._res_table:
                 row = self._res_table.currentRow()
@@ -1869,6 +1866,9 @@ class ScoutWindow(QMainWindow):
         self._entry.selectAll()
 
     def _clear_search(self):
+        if self._completion_popup.isVisible():
+            self._completion_popup.hide()
+            return
         self._entry.clear()
         self._entry.setFocus()
 
