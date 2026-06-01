@@ -919,7 +919,7 @@ class ScoutWindow(QMainWindow):
         self._hist_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._hist_table.setShowGrid(False)
         self._hist_table.verticalHeader().setVisible(False)
-        self._hist_table.setSortingEnabled(False)
+        self._hist_table.setSortingEnabled(True)
         self._hist_table.setItemDelegateForColumn(0, _HistTimeDelegate(self._hist_table))
         self._hist_table.itemDoubleClicked.connect(self._on_hist_double_click)
         self._hist_table.installEventFilter(self)
@@ -1704,6 +1704,7 @@ class ScoutWindow(QMainWindow):
         existing.append(f"{ts} - {query}")
         with open(HISTORY_FILE, "w") as f:
             f.write("\n".join(existing) + "\n")
+        self._hist_table.setSortingEnabled(False)
         for r in range(self._hist_table.rowCount()):
             item = self._hist_table.item(r, 1)
             if item and item.text() == query:
@@ -1712,11 +1713,14 @@ class ScoutWindow(QMainWindow):
         self._hist_table.insertRow(0)
         self._hist_table.setItem(0, 0, _datetime_item(ts))
         self._hist_table.setItem(0, 1, QTableWidgetItem(query))
+        self._hist_table.setSortingEnabled(True)
         self._completion_add(query)
 
     def _load_history(self):
+        self._hist_table.setSortingEnabled(False)
         self._hist_table.setRowCount(0)
         if not os.path.exists(HISTORY_FILE):
+            self._hist_table.setSortingEnabled(True)
             return
         seen: dict[str, str] = {}
         with open(HISTORY_FILE) as f:
@@ -1734,6 +1738,7 @@ class ScoutWindow(QMainWindow):
             self._hist_table.insertRow(r)
             self._hist_table.setItem(r, 0, _datetime_item(ts))
             self._hist_table.setItem(r, 1, QTableWidgetItem(query))
+        self._hist_table.setSortingEnabled(True)
         self._hist_table.horizontalHeader().resizeSections(
             QHeaderView.ResizeMode.ResizeToContents)
         self._hist_table.setColumnWidth(0, self._hist_table.columnWidth(0) + 12)
