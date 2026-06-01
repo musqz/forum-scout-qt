@@ -546,33 +546,50 @@ class _MultiWordProxyModel(QSortFilterProxyModel):
 
 
 class _SearchLineEdit(QLineEdit):
-    """QLineEdit whose completer popup is navigated with arrow keys without overwriting typed text."""
+    """QLineEdit that cycles completer suggestions inline with Up/Down, hiding the popup."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cycle_items: list[str] = []
+        self._cycle_index: int       = -1
+        self._cycle_base:  str       = ""
 
     def keyPressEvent(self, event):
-        completer = self.completer()
-        popup     = completer.popup() if completer else None
+        key = event.key()
 
-        if popup and popup.isVisible() and event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
-            model   = popup.model()
-            count   = model.rowCount()
-            cur_row = popup.currentIndex().row()  # -1 when nothing is selected
+        if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+            completer = self.completer()
+            popup     = completer.popup() if completer else None
 
-            if event.key() == Qt.Key.Key_Down:
-                new_row = 0 if cur_row < 0 else min(cur_row + 1, count - 1)
-            else:
-                new_row = -1 if cur_row <= 0 else cur_row - 1
+            # On the first arrow press, snapshot the suggestion list and hide the popup
+            if self._cycle_index < 0 and popup and popup.isVisible():
+                self._cycle_base  = self.text()
+                model             = popup.model()
+                self._cycle_items = [
+                    t for i in range(model.rowCount())
+                    if (t := model.data(model.index(i, 0), Qt.ItemDataRole.DisplayRole))
+                ]
+                popup.hide()
 
-            sm = popup.selectionModel()
-            sm.blockSignals(True)
-            if new_row < 0:
-                sm.clearSelection()
-            else:
-                idx = model.index(new_row, 0)
-                popup.setCurrentIndex(idx)
-                popup.scrollTo(idx)
-            sm.blockSignals(False)
-            popup.viewport().update()
-            return
+            if self._cycle_items:
+                n = len(self._cycle_items)
+                if key == Qt.Key.Key_Down:
+                    self._cycle_index = min(self._cycle_index + 1, n - 1)
+                else:
+                    self._cycle_index -= 1
+
+                text = (self._cycle_base if self._cycle_index < 0
+                        else self._cycle_items[self._cycle_index])
+                self.blockSignals(True)
+                self.setText(text)
+                self.blockSignals(False)
+                self.setCursorPosition(len(text))
+                return
+
+        # Any non-arrow key resets the cycle
+        self._cycle_index = -1
+        self._cycle_items = []
+        self._cycle_base  = ""
 
         super().keyPressEvent(event)
 
