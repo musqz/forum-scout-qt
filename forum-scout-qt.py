@@ -545,6 +545,38 @@ class _MultiWordProxyModel(QSortFilterProxyModel):
         return all(w in lower for w in self._words)
 
 
+class _SearchLineEdit(QLineEdit):
+    """QLineEdit whose completer popup is navigated with arrow keys without overwriting typed text."""
+
+    def keyPressEvent(self, event):
+        completer = self.completer()
+        popup     = completer.popup() if completer else None
+
+        if popup and popup.isVisible() and event.key() in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+            model   = popup.model()
+            count   = model.rowCount()
+            cur_row = popup.currentIndex().row()  # -1 when nothing is selected
+
+            if event.key() == Qt.Key.Key_Down:
+                new_row = 0 if cur_row < 0 else min(cur_row + 1, count - 1)
+            else:
+                new_row = -1 if cur_row <= 0 else cur_row - 1
+
+            sm = popup.selectionModel()
+            sm.blockSignals(True)
+            if new_row < 0:
+                sm.clearSelection()
+            else:
+                idx = model.index(new_row, 0)
+                popup.setCurrentIndex(idx)
+                popup.scrollTo(idx)
+            sm.blockSignals(False)
+            popup.viewport().update()
+            return
+
+        super().keyPressEvent(event)
+
+
 class FlowLayout(QLayout):
     """Wrapping flow layout — items wrap to the next row when the width is exceeded."""
     def __init__(self, parent=None, h_spacing=8, v_spacing=4):
@@ -665,7 +697,7 @@ class ScoutWindow(QMainWindow):
         row1 = QHBoxLayout()
         row1.setSpacing(4)
 
-        self._entry = QLineEdit()
+        self._entry = _SearchLineEdit()
         self._entry.setPlaceholderText(S["search_ph"])
         self._entry.returnPressed.connect(self._on_search)
         self._entry.textChanged.connect(self._on_entry_changed)
