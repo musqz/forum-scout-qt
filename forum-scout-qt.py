@@ -546,51 +546,37 @@ class _MultiWordProxyModel(QSortFilterProxyModel):
 
 
 class _SearchLineEdit(QLineEdit):
-    """QLineEdit that cycles completer suggestions inline with Up/Down, hiding the popup."""
+    """QLineEdit that keeps the completer popup steady while navigating with Up/Down."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._cycle_items: list[str] = []
-        self._cycle_index: int       = -1
-        self._cycle_base:  str       = ""
+        self._navigating: bool = False
+        self._nav_base:   str  = ""
 
     def keyPressEvent(self, event):
-        key = event.key()
+        key       = event.key()
+        completer = self.completer()
+        popup     = completer.popup() if completer else None
 
-        if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
-            completer = self.completer()
-            popup     = completer.popup() if completer else None
-
-            # On the first arrow press, snapshot the suggestion list and hide the popup
-            if self._cycle_index < 0 and popup and popup.isVisible():
-                self._cycle_base  = self.text()
-                model             = popup.model()
-                self._cycle_items = [
-                    t for i in range(model.rowCount())
-                    if (t := model.data(model.index(i, 0), Qt.ItemDataRole.DisplayRole))
-                ]
-                popup.hide()
-
-            if self._cycle_items:
-                n = len(self._cycle_items)
-                if key == Qt.Key.Key_Down:
-                    self._cycle_index = min(self._cycle_index + 1, n - 1)
-                else:
-                    self._cycle_index -= 1
-
-                text = (self._cycle_base if self._cycle_index < 0
-                        else self._cycle_items[self._cycle_index])
-                self.blockSignals(True)
-                self.setText(text)
-                self.blockSignals(False)
-                self.setCursorPosition(len(text))
+        if popup and popup.isVisible():
+            if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
+                if not self._nav_base:
+                    self._nav_base = self.text()
+                self._navigating = True
+                super().keyPressEvent(event)
+                self._navigating = False
                 return
 
-        # Any non-arrow key resets the cycle
-        self._cycle_index = -1
-        self._cycle_items = []
-        self._cycle_base  = ""
+            if key == Qt.Key.Key_Escape:
+                if self._nav_base:
+                    self.setText(self._nav_base)
+                self._nav_base   = ""
+                self._navigating = False
+                popup.hide()
+                return
 
+        self._nav_base   = ""
+        self._navigating = False
         super().keyPressEvent(event)
 
 
@@ -1094,6 +1080,9 @@ class ScoutWindow(QMainWindow):
         if self._suggest_timer is not None:
             self._suggest_timer.stop()
             self._suggest_timer = None
+
+        if self._entry._navigating:
+            return
 
         # Update completer filter
         self._completion_proxy.set_filter_text(text)
