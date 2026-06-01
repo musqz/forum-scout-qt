@@ -21,17 +21,16 @@ try:
         QLineEdit, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
         QHeaderView, QStatusBar, QLabel, QSpinBox, QCheckBox, QMenu,
         QMessageBox, QAbstractItemView, QSizePolicy, QGridLayout, QFrame, QLayout,
-        QStyledItemDelegate, QStyle,
+        QStyledItemDelegate, QStyle, QListWidget,
     )
     from PyQt6.QtCore import (
-        Qt, QTimer, QObject, pyqtSignal, QSortFilterProxyModel, QStringListModel,
+        Qt, QTimer, QObject, pyqtSignal,
         QSize, QPoint, QRect, QEvent,
     )
     from PyQt6.QtGui import (
         QColor, QFont, QKeySequence, QShortcut, QFontMetrics, QBrush,
         QAction, QPalette,
     )
-    from PyQt6.QtWidgets import QCompleter
 except ImportError:
     print("Error: 'PyQt6' not found. Install with: pip install PyQt6")
     raise SystemExit(1)
@@ -508,76 +507,54 @@ class _WorkerSignals(QObject):
     bm_item_updated  = pyqtSignal(str, str, str)          # url, last_activity, solved
 
 
-# ─── Multi-word completer proxy ───────────────────────────────────────────────
-class _MultiWordCompleter(QCompleter):
-    """Matches a suggestion if every space-separated word typed appears in it."""
+class _CompletionPopup(QFrame):
+    """Floating suggestion list anchored below the search entry — no QCompleter involved."""
 
-    def __init__(self, model, parent=None):
-        super().__init__(model, parent)
-        self.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.setFilterMode(Qt.MatchFlag.MatchContains)
-        self.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+    item_chosen = pyqtSignal(str)
 
-    def splitPath(self, path: str) -> list[str]:
-        # Return path unchanged so pathFromIndex works normally.
-        # We override the filter via a proxy instead.
-        return [path]
-
-    def pathFromIndex(self, index):
-        return self.model().data(index, Qt.ItemDataRole.DisplayRole)
-
-
-class _MultiWordProxyModel(QSortFilterProxyModel):
-    def __init__(self, parent=None):
+    def __init__(self, parent: QWidget):
         super().__init__(parent)
-        self._words: list[str] = []
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setAutoFillBackground(True)
+        self.hide()
 
-    def set_filter_text(self, text: str):
-        self._words = text.lower().split()
-        self.invalidateFilter()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(1, 1, 1, 1)
+        layout.setSpacing(0)
 
-    def filterAcceptsRow(self, source_row: int, source_parent):
-        if not self._words:
-            return True
-        idx   = self.sourceModel().index(source_row, 0, source_parent)
-        value = self.sourceModel().data(idx, Qt.ItemDataRole.DisplayRole) or ""
-        lower = value.lower()
-        return all(w in lower for w in self._words)
+        self._list = QListWidget()
+        self._list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._list.itemClicked.connect(lambda item: self.item_chosen.emit(item.text()))
+        layout.addWidget(self._list)
 
+    def anchor_below(self, entry: QWidget):
+        pos = entry.mapTo(self.parentWidget(), QPoint(0, entry.height()))
+        self.setFixedWidth(entry.width())
+        self.move(pos)
+        self.raise_()
 
-class _SearchLineEdit(QLineEdit):
-    """QLineEdit that keeps the completer popup steady while navigating with Up/Down."""
+    def set_items(self, items: list[str]):
+        self._list.clear()
+        for text in items:
+            self._list.addItem(text)
+        self._list.setCurrentRow(-1)
+        row_h = self._list.sizeHintForRow(0) if items else 22
+        self._list.setFixedHeight(min(len(items), 10) * row_h + 4)
+        self.adjustSize()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._navigating: bool = False
-        self._nav_base:   str  = ""
+    def move_selection(self, delta: int):
+        n = self._list.count()
+        if n == 0:
+            return
+        cur = self._list.currentRow()
+        new_row = 0 if cur < 0 and delta > 0 else max(0, min(n - 1, cur + delta))
+        self._list.setCurrentRow(new_row)
+        self._list.scrollToItem(self._list.item(new_row))
 
-    def keyPressEvent(self, event):
-        key       = event.key()
-        completer = self.completer()
-        popup     = completer.popup() if completer else None
-
-        if popup and popup.isVisible():
-            if key in (Qt.Key.Key_Down, Qt.Key.Key_Up):
-                if not self._nav_base:
-                    self._nav_base = self.text()
-                self._navigating = True
-                super().keyPressEvent(event)
-                self._navigating = False
-                return
-
-            if key == Qt.Key.Key_Escape:
-                if self._nav_base:
-                    self.setText(self._nav_base)
-                self._nav_base   = ""
-                self._navigating = False
-                popup.hide()
-                return
-
-        self._nav_base   = ""
-        self._navigating = False
-        super().keyPressEvent(event)
+    def current_text(self) -> str | None:
+        item = self._list.currentItem()
+        return item.text() if item else None
 
 
 class FlowLayout(QLayout):
@@ -700,11 +677,12 @@ class ScoutWindow(QMainWindow):
         row1 = QHBoxLayout()
         row1.setSpacing(4)
 
-        self._entry = _SearchLineEdit()
+        self._entry = QLineEdit()
         self._entry.setPlaceholderText(S["search_ph"])
         self._entry.returnPressed.connect(self._on_search)
         self._entry.textChanged.connect(self._on_entry_changed)
-        self._build_completer()
+        self._entry.installEventFilter(self)
+        self._build_completion_popup()
         row1.addWidget(self._entry, stretch=1)
 
         self._btn = QPushButton(S["search_btn"])
@@ -1026,7 +1004,7 @@ class ScoutWindow(QMainWindow):
         self._status_lbl.setText(msg)
 
     # ── Autocomplete ──────────────────────────────────────────────────────────
-    def _build_completer(self):
+    def _build_completion_popup(self):
         self._completion_list: list[str] = []
         self._completion_seen: set[str]  = set()
         self._live_count                 = 0
@@ -1052,26 +1030,17 @@ class ScoutWindow(QMainWindow):
             except Exception:
                 pass
 
-        self._completion_model = QStringListModel(self._completion_list)
-        self._completion_proxy = _MultiWordProxyModel()
-        self._completion_proxy.setSourceModel(self._completion_model)
-
-        completer = QCompleter(self._completion_proxy, self._entry)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.activated.connect(self._on_completion_selected)
-        self._entry.setCompleter(completer)
-        self._completer = completer
+        self._completion_popup = _CompletionPopup(self.centralWidget())
+        self._completion_popup.item_chosen.connect(self._on_completion_selected)
 
     def _completion_add(self, query: str):
         key = query.strip().lower()
         if key and key not in self._completion_seen:
             self._completion_seen.add(key)
             self._completion_list.insert(0, query.strip())
-            self._completion_model.setStringList(self._completion_list)
 
     def _on_completion_selected(self, text: str):
+        self._completion_popup.hide()
         self._entry.setText(text)
         self._on_search()
 
@@ -1081,19 +1050,29 @@ class ScoutWindow(QMainWindow):
             self._suggest_timer.stop()
             self._suggest_timer = None
 
-        if self._entry._navigating:
-            return
+        self._refresh_completion_popup(text)
 
-        # Update completer filter
-        self._completion_proxy.set_filter_text(text)
-
-        if len(text.strip()) < 3 or self._busy:
+        if not text.endswith(' ') or len(text.strip()) < 3 or self._busy:
             return
 
         self._suggest_timer = QTimer(self)
         self._suggest_timer.setSingleShot(True)
         self._suggest_timer.timeout.connect(lambda: self._fire_suggestions(text.strip()))
         self._suggest_timer.start(_SUGGEST_DELAY)
+
+    def _refresh_completion_popup(self, text: str):
+        if not text.endswith(' ') or len(text.strip()) < 2:
+            self._completion_popup.hide()
+            return
+        words = text.strip().lower().split()
+        items = [t for t in self._completion_list
+                 if all(w in t.lower() for w in words)]
+        if not items:
+            self._completion_popup.hide()
+            return
+        self._completion_popup.set_items(items)
+        self._completion_popup.anchor_below(self._entry)
+        self._completion_popup.show()
 
     def _fire_suggestions(self, term: str):
         self._suggest_timer = None
@@ -1131,22 +1110,18 @@ class ScoutWindow(QMainWindow):
             return
         self._suggest_lbl.setVisible(False)
 
-        # Remove previously prepended live suggestions
         for _ in range(self._live_count):
             if self._completion_list:
                 self._completion_list.pop(0)
-                if s := next((s for s in self._completion_seen if True), None):
-                    pass  # seen set stays (permanent terms should stay seen)
         self._live_count = 0
 
         new_live = [s for s in suggestions if s.lower() not in self._completion_seen]
         for s in reversed(new_live):
             self._completion_list.insert(0, s)
         self._live_count = len(new_live)
-        self._completion_model.setStringList(self._completion_list)
 
         if new_live:
-            self._completer.complete()
+            self._refresh_completion_popup(self._entry.text())
 
     # ── Search logic ──────────────────────────────────────────────────────────
     def _on_search(self):
@@ -1154,9 +1129,7 @@ class ScoutWindow(QMainWindow):
             self._suggest_timer.stop()
             self._suggest_timer = None
         self._suggest_token += 1
-        c = self._entry.completer()
-        if c:
-            c.popup().hide()
+        self._completion_popup.hide()
 
         query = self._entry.text().strip()
         if not query or self._busy:
@@ -1292,6 +1265,23 @@ class ScoutWindow(QMainWindow):
         return item.data(Qt.ItemDataRole.UserRole) if item else ""
 
     def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            if obj is self._entry and self._completion_popup.isVisible():
+                key = event.key()
+                if key == Qt.Key.Key_Down:
+                    self._completion_popup.move_selection(1)
+                    return True
+                if key == Qt.Key.Key_Up:
+                    self._completion_popup.move_selection(-1)
+                    return True
+                if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    text = self._completion_popup.current_text()
+                    if text:
+                        self._on_completion_selected(text)
+                        return True
+                if key == Qt.Key.Key_Escape:
+                    self._completion_popup.hide()
+                    return True
         if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             if obj is self._res_table:
                 row = self._res_table.currentRow()
@@ -1802,7 +1792,6 @@ class ScoutWindow(QMainWindow):
             if key not in self._completion_seen:
                 self._completion_seen.add(key)
                 self._completion_list.append(term)
-        self._completion_model.setStringList(self._completion_list)
 
     def _on_hist_double_click(self, item):
         row = item.row()
@@ -1839,7 +1828,7 @@ class ScoutWindow(QMainWindow):
         self._notebook.setCurrentIndex((page - 1) % navigable)
 
     def _focus_active_table(self):
-        self._completer.popup().hide()
+        self._completion_popup.hide()
         self._entry.clearFocus()
         idx = self._notebook.currentIndex()
         if idx == 0:
