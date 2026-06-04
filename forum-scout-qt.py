@@ -468,19 +468,6 @@ def _datetime_item(iso: str) -> _DateItem:
     return item
 
 
-def _fit_fixed_cols_to_headers(table, cols: list) -> None:
-    """Ensure fixed-width columns are at least wide enough to show their header text."""
-    header = table.horizontalHeader()
-    fm = header.fontMetrics()
-    for col in cols:
-        item = table.horizontalHeaderItem(col)
-        if item is None:
-            continue
-        min_w = fm.horizontalAdvance(item.text()) + 24  # 24px covers padding + sort arrow
-        if table.columnWidth(col) < min_w:
-            table.setColumnWidth(col, min_w)
-
-
 class _HistTimeDelegate(QStyledItemDelegate):
     """Draws history Time cell: today → orange time only; older → date + orange time."""
 
@@ -846,7 +833,6 @@ class ScoutWindow(QMainWindow):
         self._res_table.setColumnWidth(3, 79)
         self._res_table.setColumnWidth(4, 79)
         self._res_table.setColumnWidth(5, 22)
-        _fit_fixed_cols_to_headers(self._res_table, [3, 4])
         self._res_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self._res_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self._res_table.setShowGrid(False)
@@ -914,7 +900,6 @@ class ScoutWindow(QMainWindow):
         self._bm_table.setColumnWidth(2, 82)
         self._bm_table.setColumnWidth(3, 79)
         self._bm_table.setColumnWidth(4, 22)
-        _fit_fixed_cols_to_headers(self._bm_table, [2, 3])
         self._bm_table.setItemDelegateForColumn(2, _AddedDateDelegate(self._bm_table))
         self._bm_table.setItemDelegateForColumn(3, _LocaleDateDelegate(self._bm_table))
         self._bm_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1283,7 +1268,6 @@ class ScoutWindow(QMainWindow):
             self._busy = False
             self._res_table.setSortingEnabled(True)
             self._res_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
-            _fit_fixed_cols_to_headers(self._res_table, [3, 4])
 
         if new_results and not self._tab_switched:
             self._notebook.setCurrentIndex(0)
@@ -1524,7 +1508,6 @@ class ScoutWindow(QMainWindow):
             self._bm_table.setItem(r, 4, item_s)
         self._bm_table.setSortingEnabled(True)
         self._bm_table.horizontalHeader().resizeSections(QHeaderView.ResizeMode.ResizeToContents)
-        _fit_fixed_cols_to_headers(self._bm_table, [2, 3])
 
     def _load_bookmarks(self):
         self._bm_data = []
