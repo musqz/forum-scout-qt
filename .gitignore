@@ -223,3 +223,4 @@ packaging/pkg/
 packaging/*.pkg.tar.zst
 packaging/*.tar.gz
 CLAUDE.md
+claude.md
