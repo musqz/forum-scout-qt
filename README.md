@@ -8,8 +8,6 @@ A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums a
 
 ![result](images/result.png)
 
-![info](images/info.png)
-
 ---
 
 ## Features
