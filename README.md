@@ -123,7 +123,7 @@ export QT_QPA_PLATFORM=xcb
 
 ## GTK version
 
-Looking for the GTK3 version? → [github.com/musqz/forum-scout](https://github.com/musqz/forum-scout)
+Looking for the GTK3 version? → [codeberg.org/linux-bird/forum-scout](https://codeberg.org/linux-bird/forum-scout)
 
 ---
 
