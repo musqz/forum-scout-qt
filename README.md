@@ -1,3 +1,6 @@
+> **This repository has moved to Codeberg: https://codeberg.org/linux-bird/forum-scout-qt**
+> It is archived here. Please use Codeberg for issues and pull requests.
+
 # Forum Scout
 
 A lightweight PyQt6 desktop app that searches multiple Arch-based Linux forums at once. Built for KDE and Qt-based desktops.
