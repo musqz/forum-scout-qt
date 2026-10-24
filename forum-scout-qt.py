@@ -167,7 +167,7 @@ S = _load_translation(_lang)
 # ─── HTTP session ─────────────────────────────────────────────────────────────
 _session = requests.Session()
 _session.headers["User-Agent"] = (
-    f"forum-scout/{_VERSION} (https://github.com/musqz/forum-scout)"
+    f"forum-scout/{_VERSION} (https://codeberg.org/linux-bird/forum-scout)"
 )
 
 # ─── DuckDuckGo HTML parser ───────────────────────────────────────────────────
@@ -988,7 +988,7 @@ class ScoutWindow(QMainWindow):
         sep.setFrameShadow(QFrame.Shadow.Sunken)
         v.addWidget(sep)
 
-        link = QLabel('<a href="https://github.com/musqz/forum-scout">github.com/musqz/forum-scout</a>')
+        link = QLabel('<a href="https://codeberg.org/linux-bird/forum-scout-qt">codeberg.org/linux-bird/forum-scout-qt</a>')
         link.setAlignment(Qt.AlignmentFlag.AlignCenter)
         link.setOpenExternalLinks(True)
         v.addWidget(link)
